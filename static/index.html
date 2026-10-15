@@ -1,0 +1,643 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self'" />
+  <title>Slmmury</title>
+  <style>
+    :root {
+      --bg: #f6f5fb; --panel: #ffffff; --panel-2: #f1effa; --line: #e7e4f2;
+      --text: #1d1b26; --sub: #6b6880; --faint: #9a97ad;
+      --brand: #5b47f0; --brand-2: #7c6bff; --brand-soft: #ece9ff;
+      --red: #e5484d; --red-soft: #fff0f0; --green: #18794e; --green-soft: #e6f6ec; --amber: #946800; --amber-soft: #fff4d6;
+      --radius: 12px; --shadow: 0 1px 2px rgba(20, 10, 60, .04), 0 4px 16px rgba(20, 10, 60, .05);
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #15141c; --panel: #1e1d28; --panel-2: #262433; --line: #2f2d3d;
+        --text: #ecebf3; --sub: #a3a0b8; --faint: #77748c;
+        --brand: #8b7cff; --brand-2: #a497ff; --brand-soft: #2c2750;
+        --red-soft: #3a1d22; --green: #4cc38a; --green-soft: #1b3326; --amber: #f1c35b; --amber-soft: #3a3019;
+        --shadow: 0 1px 2px rgba(0, 0, 0, .3);
+      }
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body { margin: 0; font: 13px/1.5 -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Segoe UI", "Malgun Gothic", "Noto Sans KR", "Noto Sans CJK KR", sans-serif; color: var(--text); background: var(--bg); display: flex; flex-direction: column; -webkit-font-smoothing: antialiased; }
+    button, select, input, textarea { font: inherit; color: inherit; }
+    .hint { font-size: 12px; color: var(--faint); }
+
+    /* 상단 바: 신호등 버튼 자리를 비우고 창 드래그 영역으로 쓴다 */
+    .topbar { -webkit-app-region: drag; display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-bottom: 1px solid var(--line); background: var(--panel); min-height: 52px; flex-wrap: wrap; }
+    .topbar > * { -webkit-app-region: no-drag; }
+    body.darwin .topbar { padding-left: 88px; }
+    .brand { -webkit-app-region: drag; display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 15px; margin-right: 6px; }
+    .brand img { width: 26px; height: 26px; }
+    .spacer { flex: 1; -webkit-app-region: drag; align-self: stretch; }
+    .ctl { display: flex; align-items: center; gap: 6px; background: var(--panel-2); border-radius: 8px; padding: 2px 4px 2px 10px; color: var(--sub); font-size: 12px; }
+    .ctl select { border: 0; background: transparent; padding: 5px 2px; font-weight: 600; color: var(--text); outline: none; cursor: pointer; }
+    .status { display: flex; align-items: center; gap: 6px; padding: 2px 6px 2px 10px; border-radius: 999px; font-weight: 600; background: var(--green-soft); color: var(--green); }
+    .status::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: currentColor; box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 25%, transparent); }
+    .status.paused { background: var(--amber-soft); color: var(--amber); }
+    .status select { border: 0; background: transparent; font-weight: 600; color: inherit; outline: none; cursor: pointer; padding: 4px 0; }
+
+    .btn { border: 1px solid var(--line); background: var(--panel); border-radius: 8px; padding: 5px 12px; cursor: pointer; font-weight: 500; transition: background .12s, border-color .12s; }
+    .btn:hover { background: var(--panel-2); }
+    .btn:disabled { opacity: .5; cursor: default; }
+    .btn.primary { background: var(--brand); border-color: var(--brand); color: #fff; }
+    .btn.primary:hover { background: var(--brand-2); }
+    .btn.ghost { border-color: transparent; background: transparent; color: var(--sub); }
+    .btn.ghost:hover { background: var(--panel-2); }
+
+    /* 본문: 왼쪽 대화 목록, 오른쪽 처리 필요 + 상세 */
+    .main { flex: 1; display: grid; grid-template-columns: 340px 1fr; min-height: 0; }
+    .sidebar { border-right: 1px solid var(--line); background: var(--panel); display: flex; flex-direction: column; min-height: 0; }
+    .addlink { padding: 12px; border-bottom: 1px solid var(--line); }
+    .addlink .row { display: flex; gap: 6px; }
+    #link { flex: 1; min-width: 0; border: 1px solid var(--line); background: var(--bg); border-radius: 8px; padding: 6px 10px; outline: none; }
+    #link:focus { border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-soft); }
+    #linkMsg:not(:empty) { display: block; margin-top: 6px; }
+    .section-label { display: flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 700; color: var(--faint); letter-spacing: .04em; text-transform: uppercase; padding: 14px 16px 6px; }
+    .count { background: var(--panel-2); color: var(--sub); border-radius: 999px; padding: 0 7px; font-size: 11px; }
+    #watches { overflow: auto; flex: 1; padding: 0 8px 12px; }
+    .watch { padding: 10px; border-radius: 10px; cursor: pointer; display: flex; gap: 10px; margin-bottom: 2px; }
+    .watch:hover { background: var(--panel-2); }
+    .watch.selected { background: var(--brand-soft); }
+    .watch .body { flex: 1; min-width: 0; }
+    .watch .name { font-weight: 600; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; word-break: break-all; }
+    .watch .top { display: flex; justify-content: space-between; align-items: center; gap: 6px; margin-bottom: 3px; }
+    .watch.off { opacity: .55; }
+    .last { font-size: 12px; color: var(--sub); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 2px; }
+    .mode { border: 1px solid var(--line); background: var(--panel); border-radius: 6px; font-size: 11px; padding: 1px 2px; color: var(--sub); cursor: pointer; }
+    .badge { background: var(--red); color: #fff; border-radius: 999px; min-width: 18px; padding: 0 6px; font-size: 11px; font-weight: 700; text-align: center; }
+    .sum { font-size: 11px; font-weight: 600; border-radius: 999px; padding: 1px 8px; white-space: nowrap; }
+    .sum.none { background: var(--panel-2); color: var(--faint); }
+    .sum.fresh { background: var(--green-soft); color: var(--green); }
+    .sum.outdated { background: var(--amber-soft); color: var(--amber); }
+    .avatar { width: 34px; height: 34px; border-radius: 10px; flex: none; display: grid; place-items: center; font-weight: 700; color: #fff; font-size: 14px; }
+
+    .content { overflow: auto; padding: 20px 24px 32px; min-height: 0; }
+    .content > section { max-width: 920px; margin: 0 auto 24px; }
+    h2 { font-size: 15px; margin: 0 0 10px; display: flex; align-items: center; gap: 8px; }
+    .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); }
+    .empty { padding: 18px; text-align: center; color: var(--faint); }
+
+    .draft { background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--brand); border-radius: var(--radius); padding: 12px 14px; margin-bottom: 10px; box-shadow: var(--shadow); }
+    .draft.escalated { border-left-color: var(--red); background: linear-gradient(var(--red-soft), var(--panel) 60%); }
+    .draft .title { font-weight: 600; cursor: pointer; margin-bottom: 4px; display: inline-block; }
+    .draft .title:hover { color: var(--brand); }
+    .meta { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 12px; color: var(--sub); margin-bottom: 8px; }
+    .chip { background: var(--panel-2); border-radius: 6px; padding: 0 7px; font-size: 11px; font-weight: 600; color: var(--sub); }
+    .chip.status { background: var(--brand-soft); color: var(--brand); box-shadow: none; }
+    .chip.status::before { display: none; }
+    .chip.danger { background: var(--red-soft); color: var(--red); }
+    .hold { display: flex; gap: 8px; align-items: baseline; font-size: 12px; background: var(--amber-soft); color: var(--amber); border-radius: 8px; padding: 6px 10px; margin-bottom: 8px; }
+    .hold b { flex: none; }
+    .draft.escalated .hold { background: var(--red-soft); color: var(--red); }
+    textarea { width: 100%; min-height: 64px; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; background: var(--bg); resize: vertical; outline: none; }
+    textarea:focus { border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-soft); }
+    .actions { margin-top: 8px; display: flex; gap: 6px; justify-content: flex-end; }
+
+    .detail-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+    .detail-head h2 { margin: 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #detailLlm { display: flex; gap: 6px; flex: none; }
+    .summary { padding: 14px 16px; margin-bottom: 14px; border-color: color-mix(in srgb, var(--brand) 30%, var(--line)); background: linear-gradient(135deg, var(--brand-soft), var(--panel) 70%); }
+    .summary .head { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+    .summary ul { margin: 8px 0; padding-left: 18px; }
+    .summary li { margin: 2px 0; }
+    .summary .foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 6px; }
+    .waiting { background: var(--red); color: #fff; border-radius: 999px; padding: 0 8px; font-size: 11px; font-weight: 700; }
+    .todos { background: var(--panel); border-radius: 8px; padding: 8px 10px; margin-top: 8px; }
+
+    .timeline { padding: 16px; max-height: 64vh; overflow: auto; display: flex; flex-direction: column; gap: 10px; }
+    .msg { max-width: 78%; align-self: flex-start; }
+    .msg .who { font-size: 11px; color: var(--faint); margin: 0 4px 2px; }
+    .msg .text { background: var(--panel-2); border-radius: 4px 14px 14px 14px; padding: 8px 12px; white-space: pre-wrap; word-break: break-word; }
+    .msg.mine { align-self: flex-end; }
+    .msg.mine .who { text-align: right; }
+    .msg.mine .text { background: var(--brand); color: #fff; border-radius: 14px 4px 14px 14px; }
+    .event { align-self: center; max-width: 86%; font-size: 12px; color: var(--sub); background: var(--bg); border: 1px dashed var(--line); border-radius: 10px; padding: 6px 12px; white-space: pre-wrap; }
+    .timeline .draft { align-self: stretch; margin: 0; }
+    /* 첫 실행 설정 */
+    #setup { position: fixed; inset: 0; z-index: 10; background: var(--bg); overflow: auto; padding: 56px 24px 40px; -webkit-app-region: drag; }
+    #setup[hidden] { display: none; }
+    #setup .wrap { max-width: 640px; margin: 0 auto; -webkit-app-region: no-drag; }
+    #setup .hero { text-align: center; margin-bottom: 24px; }
+    #setup .hero img { width: 72px; height: 72px; }
+    #setup .hero h1 { font-size: 22px; margin: 8px 0 4px; }
+    .step { padding: 16px 18px; margin-bottom: 12px; }
+    .step h3 { display: flex; align-items: center; gap: 10px; margin: 0 0 8px; font-size: 14px; }
+    .step .num { width: 22px; height: 22px; border-radius: 50%; background: var(--panel-2); color: var(--sub); display: grid; place-items: center; font-size: 12px; flex: none; }
+    .step.done .num { background: var(--green); color: #fff; }
+    .step.done .num::after { content: "✓"; }
+    .step.done .num span { display: none; }
+    .step ol { margin: 6px 0 10px; padding-left: 20px; color: var(--sub); }
+    .step ol li { margin: 3px 0; }
+    .step code { background: var(--panel-2); border-radius: 4px; padding: 0 5px; font-size: 12px; }
+    .step .field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; }
+    .step .field input, .step select.input { border: 1px solid var(--line); background: var(--bg); border-radius: 8px; padding: 7px 10px; outline: none; font-family: ui-monospace, Menlo, Consolas, "DejaVu Sans Mono", monospace; font-size: 12px; }
+    .step .field input:focus { border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-soft); }
+    .step .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .step .result { font-size: 12px; }
+    .step .result.ok { color: var(--green); }
+    .step .result.err { color: var(--red); }
+    #learnLog { font: 11px/1.5 ui-monospace, Menlo, Consolas, "DejaVu Sans Mono", monospace; background: var(--panel-2); border-radius: 8px; padding: 8px 10px; max-height: 140px; overflow: auto; white-space: pre-wrap; margin-top: 8px; }
+    #learnLog:empty { display: none; }
+    #setup .go { width: 100%; padding: 10px; font-size: 14px; font-weight: 700; margin-top: 4px; }
+    /* Slack 연결 가이드 */
+    #guide { position: fixed; inset: 0; z-index: 20; background: var(--bg); display: grid; grid-template-columns: 220px 1fr; }
+    #guide[hidden] { display: none; }
+    #guide nav { background: var(--panel); border-right: 1px solid var(--line); padding: 52px 10px 16px; display: flex; flex-direction: column; gap: 2px; -webkit-app-region: drag; }
+    #guide nav > * { -webkit-app-region: no-drag; }
+    #guide nav .title { font-weight: 700; font-size: 14px; padding: 0 10px 10px; }
+    #guide nav button { text-align: left; border: 0; background: transparent; border-radius: 8px; padding: 8px 10px; cursor: pointer; color: var(--sub); font-weight: 500; }
+    #guide nav button:hover { background: var(--panel-2); }
+    #guide nav button.on { background: var(--brand-soft); color: var(--brand); font-weight: 700; }
+    #guide nav .close { margin-top: auto; }
+    #guide .page { overflow: auto; padding: 40px 32px; }
+    #guide .page > div { max-width: 760px; }
+    #guide h2 { font-size: 20px; margin: 0 0 6px; }
+    #guide h4 { margin: 18px 0 6px; font-size: 14px; }
+    #guide p { color: var(--sub); margin: 4px 0 10px; }
+    .crumb { display: inline-flex; flex-wrap: wrap; gap: 4px; align-items: center; font-size: 12px; font-weight: 600; }
+    .crumb span { background: var(--panel-2); border-radius: 6px; padding: 1px 8px; }
+    .crumb span + span::before { content: "›"; margin: 0 6px 0 -2px; color: var(--faint); }
+    .tstep { display: grid; grid-template-columns: 30px 1fr; gap: 12px; padding: 14px 16px; margin-bottom: 10px; }
+    .tstep .n { width: 26px; height: 26px; border-radius: 50%; background: var(--brand); color: #fff; display: grid; place-items: center; font-weight: 700; font-size: 13px; }
+    .tstep b.t { display: block; font-size: 14px; margin-bottom: 4px; }
+    .tstep ul { margin: 6px 0 0; padding-left: 18px; color: var(--sub); }
+    .tstep li { margin: 3px 0; }
+    .note { border-left: 3px solid var(--amber); background: var(--amber-soft); color: var(--text); border-radius: 6px; padding: 8px 12px; margin: 8px 0; font-size: 12px; }
+    .note.info { border-color: var(--brand); background: var(--brand-soft); }
+    .opt { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; margin-bottom: 6px; cursor: pointer; background: var(--panel); }
+    .opt input { margin-top: 3px; accent-color: var(--brand); }
+    .opt small { display: block; color: var(--sub); }
+    pre.yaml { background: var(--panel-2); border-radius: 10px; padding: 12px 14px; font: 12px/1.6 ui-monospace, Menlo, Consolas, "DejaVu Sans Mono", monospace; overflow: auto; max-height: 300px; margin: 8px 0; }
+    table.tbl { width: 100%; border-collapse: collapse; font-size: 12px; background: var(--panel); border-radius: 10px; overflow: hidden; box-shadow: var(--shadow); }
+    table.tbl th { text-align: left; background: var(--panel-2); color: var(--sub); font-weight: 600; padding: 8px 10px; }
+    table.tbl td { padding: 8px 10px; border-top: 1px solid var(--line); vertical-align: top; }
+    table.tbl code { font-size: 12px; }
+    .tag { font-size: 10px; font-weight: 700; border-radius: 999px; padding: 1px 7px; background: var(--red-soft); color: var(--red); white-space: nowrap; }
+    .tag.opt2 { background: var(--panel-2); color: var(--sub); }
+    details.faq { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; margin-bottom: 8px; }
+    details.faq summary { cursor: pointer; font-weight: 600; }
+    details.faq summary code { font-weight: 600; }
+    details.faq div { color: var(--sub); margin-top: 6px; }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><img src="../assets/icon.png" alt="" />Slmmury</div>
+    <label class="status" id="statusPill"><select id="paused"><option value="off">실행 중</option><option value="on">일시정지</option></select></label>
+    <label class="ctl">감지 <select id="autoDetect"><option value="on">멘션·DM 자동</option><option value="off">링크만</option></select></label>
+    <label class="ctl">전송 <select id="sendMode"><option value="draft">초안만</option><option value="auto">자동</option></select></label>
+    <label class="ctl" title="채널 스레드는 내 차례인지 먼저 이 모델로 보고, 답할 때만 기본 모델로 초안을 씁니다 (DM은 항상 기본 모델)">1차 판단 <select id="judgeModel"></select></label>
+    <label class="ctl">모델 <select id="model"></select></label>
+    <label class="ctl">초안 <select id="draftEffort"></select></label>
+    <label class="ctl">요약 <select id="summaryEffort"></select></label>
+    <div class="spacer"></div>
+    <span id="summaryMsg" class="hint"></span>
+    <button id="summarizeStale" class="btn">✦ 안 된 대화 모두 요약</button>
+    <button id="openSetup" class="btn ghost" title="Slack 연결·말투 학습 설정">⚙︎</button>
+  </header>
+
+  <div class="main">
+    <aside class="sidebar">
+      <div class="addlink">
+        <div class="row">
+          <input id="link" placeholder="Slack 메시지 링크 붙여넣기" />
+          <button id="addLink" class="btn primary">감시</button>
+        </div>
+        <span id="linkMsg" class="hint"></span>
+      </div>
+      <div class="section-label">감시 중인 대화 <span class="count" id="watchCount">0</span></div>
+      <div id="watches"></div>
+    </aside>
+
+    <main class="content">
+      <section>
+        <h2>처리 필요 <span class="count" id="inboxCount">0</span> <span class="hint">승인하거나 직접 봐야 하는 초안</span></h2>
+        <div id="inbox"></div>
+      </section>
+      <section>
+        <div class="detail-head">
+          <h2 id="detailTitle">대화 상세</h2>
+          <div id="detailLlm"></div>
+        </div>
+        <div id="detail" class="card empty">왼쪽에서 대화를 고르세요</div>
+      </section>
+    </main>
+  </div>
+
+  <div id="setup" hidden>
+    <div class="wrap">
+      <div class="hero"><img src="../assets/icon.png" alt="" /><h1>Slmmury 시작하기</h1><div class="hint">내 Slack 계정으로 메시지를 받아 내 말투로 답장 초안을 씁니다</div></div>
+
+      <div class="card step" id="stepClaude">
+        <h3><span class="num"><span>1</span></span>Claude Code 로그인</h3>
+        <div class="hint">답장·요약은 이 컴퓨터에 로그인된 Claude Code(<code>claude -p</code>)로 만듭니다. API 키는 필요 없습니다.</div>
+        <div class="row" style="margin-top:8px"><span id="claudeResult" class="result">확인 중…</span><button id="recheckClaude" class="btn">다시 확인</button></div>
+      </div>
+
+      <div class="card step" id="stepSlack">
+        <h3><span class="num"><span>2</span></span>Slack 앱 연결</h3>
+        <div class="hint">Slack 앱을 하나 만들고 토큰 두 개를 받아 붙여넣습니다. 처음이면 가이드를 따라 하세요 (5분).</div>
+        <div class="row" style="margin:10px 0 12px"><button class="btn primary" data-guide="make">📖 연결 가이드 열기</button><button class="btn" data-guide="scopes">필요 권한 보기</button></div>
+        <label class="field"><span class="hint">User OAuth Token</span><input id="userToken" type="password" placeholder="xoxp-…" autocomplete="off" /></label>
+        <label class="field"><span class="hint">App-Level Token</span><input id="appToken" type="password" placeholder="xapp-…" autocomplete="off" /></label>
+        <div class="row"><button id="saveTokens" class="btn primary">확인하고 저장</button><span id="tokenResult" class="result"></span></div>
+        <div id="scopeWarn" class="result err" style="margin-top:6px"></div>
+        <div class="hint" style="margin-top:6px">토큰은 OS 보안 저장소(macOS 키체인 · Windows DPAPI · Linux 키링)로 암호화해 이 컴퓨터에만 저장합니다.</div>
+      </div>
+
+      <div class="card step" id="stepPersona">
+        <h3><span class="num"><span>3</span></span>말투 학습</h3>
+        <div class="hint">공개 채널에 내가 쓴 메시지만 읽어서 말투 가이드를 만듭니다. DM·비공개 채널은 읽지 않습니다.</div>
+        <div class="row" style="margin-top:8px">
+          <select id="learnMonths" class="btn"><option value="3">최근 3개월</option><option value="6" selected>최근 6개월</option><option value="12">최근 12개월</option></select>
+          <button id="learn" class="btn primary">학습 시작</button><span id="learnResult" class="result"></span>
+        </div>
+        <div id="learnLog"></div>
+      </div>
+
+      <div class="card step" id="stepGroups">
+        <h3><span class="num"><span>4</span></span>그룹 멘션 <span class="hint">(선택)</span></h3>
+        <div class="hint">내가 속한 사용자 그룹이 멘션될 때도 반응하게 하려면 그룹 ID(<code>S…</code>)를 쉼표로 적으세요. Slack에서 그룹 프로필 → ⋯ → 그룹 ID 복사.</div>
+        <div class="row" style="margin-top:8px"><label class="field" style="flex:1;margin:0"><input id="groups" placeholder="S0123ABCD, S0456EFGH" /></label><button id="saveGroups" class="btn">저장</button><span id="groupsResult" class="result"></span></div>
+      </div>
+
+      <button id="startApp" class="btn primary go" disabled>시작하기</button>
+      <div id="startResult" class="result err" style="text-align:center;margin-top:8px"></div>
+    </div>
+  </div>
+
+  <div id="guide" hidden>
+    <nav>
+      <div class="title">Slack 연결 가이드</div>
+      <button data-page="make">① 매니페스트 만들기</button>
+      <button data-page="tutorial">② 연결 튜토리얼</button>
+      <button data-page="scopes">③ 권한·설정 설명</button>
+      <button data-page="faq">④ 문제 해결</button>
+      <button class="btn close" id="closeGuide">← 설정으로 돌아가기</button>
+    </nav>
+    <div class="page">
+      <div data-page="make">
+        <h2>매니페스트 만들기</h2>
+        <p>매니페스트는 Slack 앱의 이름·권한·설정을 담은 설계도입니다. 쓸 기능을 고르면 그에 맞는 권한만 넣어 만들어 드립니다.</p>
+        <h4>앱 이름</h4>
+        <label class="field" style="display:block"><input id="mName" class="input" style="width:100%;border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:7px 10px;outline:none" maxlength="35" placeholder="예) Slmmury 민수" /></label>
+        <p class="hint">워크스페이스에서 여러 명이 쓰면 이름 뒤에 본인 이름을 붙이면 구분하기 쉽습니다.</p>
+        <h4>쓸 기능</h4>
+        <div id="mOptions"></div>
+        <h4>결과</h4>
+        <div class="row" style="display:flex;gap:8px;flex-wrap:wrap">
+          <button id="mCreate" class="btn primary">Slack에서 이 매니페스트로 앱 만들기 ↗</button>
+          <button id="mCopy" class="btn">YAML 복사</button>
+          <span id="mMsg" class="result ok"></span>
+        </div>
+        <pre class="yaml" id="mYaml"></pre>
+        <div class="note info">"앱 만들기" 버튼을 누르면 브라우저에서 매니페스트가 채워진 생성 화면이 열립니다. 워크스페이스만 고르면 됩니다. 채워지지 않으면 <b>From a manifest</b> → YAML 탭에 복사한 내용을 붙여넣으세요.</div>
+        <div class="row" style="display:flex;justify-content:flex-end;margin-top:16px"><button class="btn primary" data-page-go="tutorial">다음: 연결 튜토리얼 →</button></div>
+      </div>
+
+      <div data-page="tutorial">
+        <h2>연결 튜토리얼</h2>
+        <p>Slack 앱을 만들고 토큰 두 개를 받아 Slmmury에 넣는 과정입니다. 5분 정도 걸립니다.</p>
+        <div class="card tstep"><div class="n">1</div><div>
+          <b class="t">앱 만들기</b>
+          <ul>
+            <li>① 매니페스트 만들기에서 <b>"Slack에서 이 매니페스트로 앱 만들기"</b>를 누릅니다.</li>
+            <li>워크스페이스를 고르고 <b>Next</b> → 내용 확인 → <b>Create</b>.</li>
+            <li>직접 할 때: <span class="crumb"><span>api.slack.com/apps</span><span>Create New App</span><span>From a manifest</span></span></li>
+          </ul>
+        </div></div>
+        <div class="card tstep"><div class="n">2</div><div>
+          <b class="t">워크스페이스에 설치</b>
+          <ul>
+            <li><span class="crumb"><span>Settings</span><span>Install App</span><span>Install to Workspace</span></span> → <b>허용</b>.</li>
+          </ul>
+          <div class="note">회사 워크스페이스는 앱 설치에 관리자 승인이 필요할 수 있습니다. 이때는 버튼이 <b>Request to Install</b>로 바뀝니다. 승인되면 다시 이 화면에서 설치합니다.</div>
+        </div></div>
+        <div class="card tstep"><div class="n">3</div><div>
+          <b class="t">User OAuth Token 복사 <code>xoxp-</code></b>
+          <ul>
+            <li><span class="crumb"><span>Features</span><span>OAuth &amp; Permissions</span><span>OAuth Tokens</span></span></li>
+            <li><b>User OAuth Token</b>을 복사합니다. 설치 직후에도 이 화면에 나옵니다.</li>
+          </ul>
+          <div class="note">Bot User OAuth Token(<code>xoxb-</code>)이 아닙니다. 이 앱은 봇이 아니라 <b>내 계정 권한</b>으로 메시지를 읽고 보냅니다.</div>
+        </div></div>
+        <div class="card tstep"><div class="n">4</div><div>
+          <b class="t">App-Level Token 만들기 <code>xapp-</code></b>
+          <ul>
+            <li><span class="crumb"><span>Settings</span><span>Basic Information</span><span>App-Level Tokens</span></span> → <b>Generate Token and Scopes</b></li>
+            <li>Token Name은 아무거나(예: <code>socket</code>), <b>Add Scope</b> → <code>connections:write</code> → <b>Generate</b></li>
+            <li>나온 <code>xapp-</code> 토큰을 복사합니다.</li>
+          </ul>
+        </div></div>
+        <div class="card tstep"><div class="n">5</div><div>
+          <b class="t">Slmmury에 붙여넣기</b>
+          <ul>
+            <li>설정 화면 2단계에 두 토큰을 넣고 <b>확인하고 저장</b>.</li>
+            <li>토큰이 실제로 동작하는지, 필요한 권한이 다 붙었는지 바로 점검합니다.</li>
+          </ul>
+        </div></div>
+        <div class="row" style="display:flex;justify-content:flex-end;gap:8px;margin-top:8px"><button class="btn" data-page-go="scopes">권한 설명 보기</button><button class="btn primary" id="guideDone">토큰 넣으러 가기 →</button></div>
+      </div>
+
+      <div data-page="scopes">
+        <h2>권한·설정 설명</h2>
+        <p>모든 권한은 <b>User Token Scopes</b>입니다. 즉 앱이 할 수 있는 일은 <b>내 계정이 이미 볼 수 있고 할 수 있는 범위</b>를 넘지 않습니다.</p>
+        <h4>권한 (OAuth Scopes)</h4>
+        <table class="tbl" id="scopeTable"></table>
+        <h4>앱 설정</h4>
+        <table class="tbl">
+          <tr><th>설정</th><th>값</th><th>이유</th></tr>
+          <tr><td>Socket Mode</td><td>켜기</td><td>공개 서버 없이 내 컴퓨터가 Slack에 직접 연결해 이벤트를 받습니다.</td></tr>
+          <tr><td>App-Level Token</td><td><code>connections:write</code></td><td>Socket Mode 연결에 쓰는 토큰입니다. 메시지 읽기·쓰기 권한은 없습니다.</td></tr>
+          <tr><td>Event Subscriptions</td><td>User events</td><td>봇이 아니라 내 계정 기준으로 DM·멘션·채널 메시지를 받습니다. Bot events는 쓰지 않습니다.</td></tr>
+          <tr><td>Token Rotation</td><td>끄기</td><td>켜면 토큰이 12시간마다 만료돼 앱이 끊깁니다.</td></tr>
+          <tr><td>Interactivity</td><td>끄기</td><td>버튼·모달을 쓰지 않습니다.</td></tr>
+        </table>
+        <div class="note">User OAuth Token은 <b>내 Slack 계정 그 자체</b>입니다. 다른 사람에게 주거나 저장소에 올리지 마세요. Slmmury는 이 컴퓨터의 OS 보안 저장소로 암호화해 보관합니다.</div>
+        <div class="note info">권한을 나중에 바꾸면(매니페스트 수정) <b>Install App → Reinstall</b>을 해야 새 권한이 토큰에 붙습니다. 토큰 값이 바뀌었다면 다시 저장하세요.</div>
+      </div>
+
+      <div data-page="faq">
+        <h2>문제 해결</h2>
+        <details class="faq"><summary><code>invalid_auth</code> / <code>not_authed</code></summary><div>토큰을 잘못 복사했거나 앱을 지우고 다시 만든 경우입니다. 토큰 앞뒤 공백 없이 다시 복사하세요.</div></details>
+        <details class="faq"><summary>"xoxp-로 시작해야 합니다"</summary><div>Bot 토큰(<code>xoxb-</code>)을 넣었습니다. OAuth &amp; Permissions의 <b>User OAuth Token</b>을 넣으세요. 안 보이면 매니페스트에 user 권한이 없는 것이니 ①에서 다시 만드세요.</div></details>
+        <details class="faq"><summary>"필수 권한이 없습니다"</summary><div>매니페스트에 권한을 추가했지만 재설치를 안 한 경우입니다. <b>Install App → Reinstall to Workspace</b> 후 새 토큰을 넣으세요.</div></details>
+        <details class="faq"><summary>App Token 확인 실패</summary><div>App-Level Token에 <code>connections:write</code>가 없거나, Socket Mode가 꺼져 있습니다. <span class="crumb"><span>Settings</span><span>Socket Mode</span></span>에서 켜세요.</div></details>
+        <details class="faq"><summary>연결은 됐는데 메시지에 반응이 없음</summary><div>
+          • Event Subscriptions의 <b>Subscribe to events on behalf of users</b>에 <code>message.im</code>, <code>message.channels</code> 등이 있는지 확인하세요.<br />
+          • 상단에서 일시정지나 자동 감지 OFF가 아닌지 확인하세요.<br />
+          • 내가 멤버가 아닌 채널은 이벤트가 오지 않습니다.
+        </div></details>
+        <details class="faq"><summary>말투 학습이 0개로 끝남</summary><div><code>search:read</code> 권한이 없거나, 최근 기간 동안 공개 채널에 쓴 메시지가 없습니다. 기간을 12개월로 늘려보세요.</div></details>
+        <details class="faq"><summary>Claude Code 로그인 필요</summary><div>터미널에서 <code>claude</code>를 실행해 로그인한 뒤 설정 화면에서 <b>다시 확인</b>을 누르세요.</div></details>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const api = window.slmmury;
+    document.body.classList.add(api.platform);
+    const $ = (id) => document.getElementById(id);
+    const el = (tag, props = {}, ...children) => { const e = Object.assign(document.createElement(tag), props); e.append(...children); return e; };
+    const STATUS = { pending: '승인 대기', escalated: '⚠️ 직접 확인', scheduled: '자동 전송 예약', sent: '보냄', ignored: '무시함', skipped: '내 차례 아님', superseded: '새 메시지로 대체됨', stale: '대화가 바뀌어 취소' };
+    const OPEN = ['pending', 'escalated', 'scheduled'];
+    const MODE = { on: 'ON', draft: '초안만', off: 'OFF' };
+    const SUMMARY = { none: '요약 전', fresh: '요약됨', outdated: '새 메시지' };
+    const MODEL_LABEL = { 'claude-sonnet-5-5': 'Sonnet 5.5', 'claude-opus-5-5': 'Opus 5.5', 'claude-haiku-5-5': 'Haiku 5.5' };
+    const options = (sel, values, labels, current) => sel.replaceChildren(...values.map((v) => el('option', { value: v, textContent: labels?.[v] ?? v, selected: v === current })));
+    const time = (ts) => new Date(Number(ts) * 1000).toLocaleString();
+    // 목록에서는 오늘이면 시각만, 아니면 날짜만
+    const shortTime = (ts) => {
+      const d = new Date(Number(ts) * 1000);
+      return d.toDateString() === new Date().toDateString() ? d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : d.toLocaleDateString([], { month: 'numeric', day: 'numeric' });
+    };
+    // 대화 제목으로 아바타 색을 고정한다
+    const HUES = [252, 280, 200, 160, 20, 330, 230, 45];
+    const avatar = (text) => {
+      const s = (text ?? '?').replace(/^[#@\s]+/, '');
+      const h = HUES[[...s].reduce((a, c) => a + c.charCodeAt(0), 0) % HUES.length];
+      return el('div', { className: 'avatar', textContent: ([...s][0] ?? '?').toUpperCase(), style: `background: linear-gradient(135deg, hsl(${h} 70% 62%), hsl(${h} 60% 46%))` });
+    };
+    let state = { openDrafts: [], watches: [] };
+    let selected = null;
+
+    const titleOf = (key) => state.watches.find((w) => w.key === key)?.title ?? key;
+
+    function draftCard(d, withTitle) {
+      const box = el('div', { className: `draft ${d.status === 'escalated' ? 'escalated' : ''}` });
+      if (withTitle) box.append(el('div', { className: 'title', textContent: titleOf(d.key), onclick: () => select(d.key) }));
+      box.append(el('div', { className: 'meta' },
+        el('span', { className: `chip ${d.status === 'escalated' ? 'danger' : 'status'}`, textContent: STATUS[d.status] }),
+        el('span', { className: 'chip', textContent: d.category }),
+        el('span', { className: `chip ${d.risk >= 60 ? 'danger' : ''}`, textContent: `위험 ${d.risk}` }),
+        el('span', { className: 'chip', textContent: `확신 ${d.confidence}` }),
+        el('span', { textContent: d.reason })));
+      // 자동 모드인데 왜 대기 중인지
+      if (d.hold_reason) box.append(el('div', { className: 'hold' }, el('b', { textContent: d.status === 'escalated' ? '직접 확인 이유' : '자동 전송 안 함' }), d.hold_reason));
+      const ta = el('textarea', { value: d.draft_text });
+      const send = el('button', { className: 'btn primary', textContent: '보내기', onclick: async () => { send.disabled = true; await api.sendDraft(d.id, ta.value); } });
+      const ignore = el('button', { className: 'btn ghost', textContent: '무시', onclick: () => api.ignoreDraft(d.id) });
+      box.append(ta, el('div', { className: 'actions' }, ignore, send));
+      return box;
+    }
+
+    function watchRow(w) {
+      const open = state.openDrafts.filter((d) => d.key === w.key).length;
+      const sel = el('select', { className: 'mode', title: '이 대화 처리 방식', onclick: (e) => e.stopPropagation(), onchange: () => api.setWatchMode(w.key, sel.value) },
+        ...Object.entries(MODE).map(([v, t]) => el('option', { value: v, textContent: t, selected: w.mode === v })));
+      const body = el('div', { className: 'body' },
+        el('div', { className: 'top' }, el('span', { className: `sum ${w.summary_state}`, textContent: SUMMARY[w.summary_state] }),
+          el('span', { className: 'hint', textContent: w.last_ts ? shortTime(w.last_ts) : '' })),
+        el('div', { className: 'name', textContent: w.title ?? w.key }),
+        el('div', { className: 'last', textContent: w.last_ts ? `${w.last_name}: ${w.last_text}` : '아직 읽지 않음' }),
+        el('div', { className: 'top', style: 'margin-top:6px' }, sel, open ? el('span', { className: 'badge', textContent: open }) : ''));
+      return el('div', { className: `watch ${w.key === selected ? 'selected' : ''} ${w.mode === 'off' ? 'off' : ''}`, onclick: () => select(w.key) }, avatar(w.title), body);
+    }
+
+    // Slack 메시지와 Slmmury 기록을 시간순으로 합친다
+    async function renderDetail() {
+      if (!selected) return;
+      $('detailTitle').textContent = titleOf(selected);
+      let conv;
+      try { conv = await api.getConversation(selected); }
+      catch (err) { $('detail').className = 'card empty'; $('detail').replaceChildren(String(err.message ?? err)); return; }
+      const sentTs = new Set(conv.drafts.map((d) => d.sent_ts).filter(Boolean));
+      const items = [
+        ...conv.messages.map((m) => ({ t: Number(m.ts) * 1000, node: el('div', { className: `msg ${m.user === conv.me ? 'mine' : ''}` },
+          el('div', { className: 'who', textContent: `${m.user === conv.me ? '나' : m.name}${sentTs.has(m.ts) ? ' · Slmmury가 보냄' : ''} · ${time(m.ts)}` }),
+          el('div', { className: 'text', textContent: m.text })) })),
+        ...conv.drafts.map((d) => ({ t: d.created_at, node: OPEN.includes(d.status) ? draftCard(d, false)
+          : el('div', { className: 'event', textContent: `🤖 ${STATUS[d.status]} · ${d.category} · 위험 ${d.risk} — ${d.reason}${d.draft_text ? `\n초안: ${d.final_text ?? d.draft_text}` : ''}` }) })),
+      ].sort((a, b) => a.t - b.t);
+      const tl = el('div', { className: 'timeline' }, ...items.map((i) => i.node));
+      $('detail').className = '';
+      $('detail').replaceChildren(summaryCard(selected, conv.summary), el('div', { className: 'card' }, tl));
+      tl.scrollTop = tl.scrollHeight;
+    }
+
+    function summaryCard(key, sum) {
+      const btn = el('button', { className: 'btn', textContent: sum ? '다시 요약' : '✦ 요약하기' });
+      btn.onclick = async () => {
+        btn.disabled = true; btn.textContent = '요약 중…';
+        try { await api.summarize(key); } catch (err) { btn.textContent = String(err.message ?? err); }
+      };
+      if (!sum) return el('div', { className: 'card summary' }, el('div', { className: 'foot' }, el('span', { className: 'hint', textContent: '아직 요약하지 않았습니다' }), btn));
+      const w = state.watches.find((x) => x.key === key);
+      return el('div', { className: 'card summary' },
+        el('div', { className: 'head' }, el('span', { className: `sum ${w?.summary_state ?? 'fresh'}`, textContent: SUMMARY[w?.summary_state ?? 'fresh'] }),
+          el('b', { textContent: sum.headline }), sum.waiting_on_me ? el('span', { className: 'waiting', textContent: '내 답 대기' }) : ''),
+        el('ul', {}, ...sum.points.map((p) => el('li', { textContent: p }))),
+        sum.my_todos.length ? el('div', { className: 'todos' }, el('b', { textContent: '내 할 일' }), el('ul', {}, ...sum.my_todos.map((t) => el('li', { textContent: t })))) : '',
+        el('div', { className: 'foot' }, el('span', { className: 'hint', textContent: `${time(sum.basis_ts)} 메시지까지 요약` }), btn));
+    }
+
+    // 대화별 모델·effort: "기본값"이면 null로 저장해서 전역 설정을 따른다
+    function renderDetailLlm() {
+      const w = state.watches.find((x) => x.key === selected);
+      if (!w) return $('detailLlm').replaceChildren();
+      const model = el('select'), effort = el('select');
+      options(model, ['', ...state.models], { '': `기본 (${MODEL_LABEL[state.settings.model]})`, ...MODEL_LABEL }, w.model ?? '');
+      options(effort, ['', ...state.efforts], { '': '기본' }, w.effort ?? '');
+      const save = () => api.setWatchLlm(w.key, model.value || null, effort.value || null);
+      model.onchange = save; effort.onchange = save;
+      $('detailLlm').replaceChildren(el('label', { className: 'ctl' }, '이 대화 모델', model), el('label', { className: 'ctl' }, 'effort', effort));
+    }
+
+    function select(key) {
+      selected = key;
+      $('watches').replaceChildren(...state.watches.map(watchRow));
+      renderDetailLlm();
+      renderDetail();
+    }
+
+    function renderTop() {
+      $('autoDetect').value = state.settings.autoDetect;
+      $('sendMode').value = state.settings.sendMode;
+      $('paused').value = state.settings.paused;
+      $('statusPill').classList.toggle('paused', state.settings.paused === 'on');
+    }
+
+    async function refresh() {
+      state = await api.getState();
+      renderTop();
+      options($('model'), state.models, MODEL_LABEL, state.settings.model);
+      options($('judgeModel'), [...state.models, 'off'], { ...MODEL_LABEL, off: '끔' }, state.settings.judgeModel);
+      options($('draftEffort'), state.efforts, null, state.settings.draftEffort);
+      options($('summaryEffort'), state.efforts, null, state.settings.summaryEffort);
+      renderDetailLlm();
+      $('inboxCount').textContent = state.openDrafts.length;
+      $('watchCount').textContent = state.watches.length;
+      $('inbox').replaceChildren(...(state.openDrafts.length ? state.openDrafts.map((d) => draftCard(d, true)) : [el('div', { className: 'card empty', textContent: '처리할 초안이 없습니다 🎉' })]));
+      $('watches').replaceChildren(...state.watches.map(watchRow));
+      renderDetail();
+    }
+
+    $('autoDetect').onchange = (e) => api.setSetting('autoDetect', e.target.value);
+    $('sendMode').onchange = (e) => api.setSetting('sendMode', e.target.value);
+    for (const id of ['paused', 'model', 'judgeModel', 'draftEffort', 'summaryEffort']) $(id).onchange = (e) => api.setSetting(id, e.target.value);
+    $('addLink').onclick = async () => {
+      const url = $('link').value;
+      $('linkMsg').textContent = '스레드 읽고 초안 쓰는 중…';
+      try { await api.addLink(url); $('link').value = ''; $('linkMsg').textContent = '등록됨'; }
+      catch (err) { $('linkMsg').textContent = String(err.message ?? err); }
+    };
+    $('link').onkeydown = (e) => { if (e.key === 'Enter') $('addLink').click(); };
+    $('summarizeStale').onclick = async () => {
+      const btn = $('summarizeStale');
+      btn.disabled = true; $('summaryMsg').textContent = '요약 중…';
+      try { const n = await api.summarizeStale(); $('summaryMsg').textContent = n ? `${n}개 대화 요약 완료` : '새로 요약할 대화가 없습니다'; }
+      catch (err) { $('summaryMsg').textContent = String(err.message ?? err); }
+      finally { btn.disabled = false; }
+    };
+
+    // ---- 첫 실행 설정 ----
+    const setup = api.setup;
+    const mark = (id, done) => $(id).classList.toggle('done', done);
+    const result = (id, ok, text) => { $(id).className = `result ${ok ? 'ok' : 'err'}`; $(id).textContent = text; };
+    let setupState = {};
+    async function loadSetup() {
+      setupState = await setup.status();
+      mark('stepClaude', setupState.claude.ok); result('claudeResult', setupState.claude.ok, setupState.claude.detail);
+      mark('stepSlack', setupState.tokens); if (setupState.tokens && !$('tokenResult').textContent) result('tokenResult', true, '저장된 토큰 있음 (바꾸려면 다시 입력)');
+      mark('stepPersona', setupState.persona); if (setupState.persona && !$('learnResult').textContent) result('learnResult', true, '학습 데이터 있음 (다시 학습 가능)');
+      const groups = state.settings?.mentionGroups;
+      if (groups && groups !== 'none' && !$('groups').value) { $('groups').value = groups; mark('stepGroups', true); }
+      $('startApp').disabled = !(setupState.claude.ok && setupState.tokens && setupState.persona);
+      $('startApp').textContent = setupState.running ? '닫기' : '시작하기';
+      return setupState;
+    }
+    const showSetup = async () => { $('setup').hidden = false; await loadSetup(); };
+    $('openSetup').onclick = showSetup;
+    $('recheckClaude').onclick = loadSetup;
+
+    // ---- Slack 연결 가이드 ----
+    const OPTIONS = [
+      { key: 'privateChannels', label: '비공개 채널', desc: '내가 속한 비공개 채널의 멘션에도 반응' },
+      { key: 'groupDms', label: '그룹 DM', desc: '여러 명이 있는 DM에도 반응' },
+      { key: 'personaLearning', label: '말투 학습', desc: '공개 채널의 내 메시지로 말투를 학습 (처음 설정에 필요)' },
+    ];
+    let manifest = { yaml: '', url: '' };
+    $('mOptions').replaceChildren(...OPTIONS.map((o) => el('label', { className: 'opt' },
+      el('input', { type: 'checkbox', checked: true, id: `m_${o.key}`, onchange: renderManifest }),
+      el('div', {}, el('b', { textContent: o.label }), el('small', { textContent: o.desc })))));
+    $('mName').oninput = renderManifest;
+    async function renderManifest() {
+      const opts = { appName: $('mName').value || 'Slmmury', ...Object.fromEntries(OPTIONS.map((o) => [o.key, $(`m_${o.key}`).checked])) };
+      manifest = await setup.manifest(opts);
+      $('mYaml').textContent = manifest.yaml;
+      $('mMsg').textContent = '';
+    }
+    $('mCreate').onclick = () => setup.openSlack(manifest.url);
+    $('mCopy').onclick = async () => { await setup.copy(manifest.yaml); $('mMsg').textContent = '복사됨'; };
+
+    async function renderScopes() {
+      const scopes = await setup.scopes();
+      const optLabel = Object.fromEntries(OPTIONS.map((o) => [o.key, o.label]));
+      $('scopeTable').replaceChildren(
+        el('tr', {}, ...['권한', '구분', '왜 필요한가', '없으면'].map((h) => el('th', { textContent: h }))),
+        ...scopes.map((s) => el('tr', {},
+          el('td', {}, el('code', { textContent: s.scope }), s.event ? el('div', { className: 'hint', textContent: `+ 이벤트 ${s.event}` }) : ''),
+          el('td', {}, el('span', { className: `tag ${s.option ? 'opt2' : ''}`, textContent: s.option ? `선택 · ${optLabel[s.option]}` : '필수' })),
+          el('td', { textContent: s.why }), el('td', { textContent: s.without }))));
+    }
+
+    function showGuidePage(page) {
+      document.querySelectorAll('#guide nav [data-page]').forEach((b) => b.classList.toggle('on', b.dataset.page === page));
+      document.querySelectorAll('#guide .page > [data-page]').forEach((p) => (p.hidden = p.dataset.page !== page));
+      document.querySelector('#guide .page').scrollTop = 0;
+    }
+    async function openGuide(page) {
+      $('guide').hidden = false;
+      showGuidePage(page);
+      await Promise.all([renderManifest(), renderScopes()]);
+    }
+    document.querySelectorAll('[data-guide]').forEach((b) => (b.onclick = () => openGuide(b.dataset.guide)));
+    document.querySelectorAll('#guide nav [data-page], [data-page-go]').forEach((b) => (b.onclick = () => showGuidePage(b.dataset.page ?? b.dataset.pageGo)));
+    $('closeGuide').onclick = () => ($('guide').hidden = true);
+    $('guideDone').onclick = () => { $('guide').hidden = true; $('userToken').focus(); };
+    $('saveTokens').onclick = async () => {
+      const btn = $('saveTokens'); btn.disabled = true; result('tokenResult', true, '확인 중…');
+      try {
+        const who = await setup.saveTokens($('userToken').value.trim(), $('appToken').value.trim());
+        result('tokenResult', true, `${who.team} · ${who.user} 계정으로 연결됨${setupState.running ? ' (앱을 다시 시작하면 적용)' : ''}`);
+        $('scopeWarn').textContent = [
+          who.missingOptional.length ? `선택 권한 없음: ${who.missingOptional.join(', ')} — 해당 기능은 동작하지 않습니다` : '',
+          who.weak ? 'OS 키링을 쓸 수 없어 토큰을 암호화하지 못했습니다 (권한 600 파일로 저장). Linux면 gnome-keyring이나 KWallet을 켜세요' : '',
+        ].filter(Boolean).join(' / ');
+        $('userToken').value = ''; $('appToken').value = '';
+      } catch (err) { result('tokenResult', false, String(err.message ?? err).replace(/^Error invoking remote method '[^']+': (Error: )?/, '')); }
+      finally { btn.disabled = false; loadSetup(); }
+    };
+    setup.onLog((line) => { const log = $('learnLog'); log.textContent += `${line}\n`; log.scrollTop = log.scrollHeight; });
+    $('learn').onclick = async () => {
+      const btn = $('learn'); btn.disabled = true; $('learnLog').textContent = ''; result('learnResult', true, '학습 중… 몇 분 걸립니다');
+      try { await setup.learn(Number($('learnMonths').value)); result('learnResult', true, '완료'); }
+      catch (err) { result('learnResult', false, String(err.message ?? err).replace(/^Error invoking remote method '[^']+': (Error: )?/, '')); }
+      finally { btn.disabled = false; loadSetup(); }
+    };
+    $('saveGroups').onclick = async () => {
+      const v = $('groups').value.replace(/\s+/g, '') || 'none';
+      try { await api.setSetting('mentionGroups', v); result('groupsResult', true, '저장됨'); mark('stepGroups', v !== 'none'); }
+      catch (err) { result('groupsResult', false, String(err.message ?? err).replace(/^Error invoking remote method '[^']+': (Error: )?/, '')); }
+    };
+    $('startApp').onclick = async () => {
+      const btn = $('startApp'); btn.disabled = true; $('startResult').textContent = '';
+      if (!setupState.running) btn.textContent = 'Slack 연결 중…';
+      try { await setup.start(); $('setup').hidden = true; refresh(); }
+      catch (err) { $('startResult').textContent = String(err.message ?? err).replace(/^Error invoking remote method '[^']+': (Error: )?/, ''); }
+      finally { loadSetup(); }
+    };
+    // 처음 켰을 때 준비가 안 됐으면 설정 화면부터
+    loadSetup().then((s) => { if (!s.running && !(s.tokens && s.persona)) $('setup').hidden = false; });
+    api.onChange(refresh);
+    refresh();
+    // SSH에서 ctl로 바꾼 설정도 화면에 반영되도록 주기적으로 새로 읽는다 (대화 상세는 Slack 호출이라 제외)
+    setInterval(async () => { state = await api.getState(); renderTop(); }, 30000);
+  </script>
+</body>
+</html>

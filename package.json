@@ -1,0 +1,31 @@
+{
+  "name": "slmmury",
+  "version": "1.0.0",
+  "description": "Slack 메시지에 내 말투로 답장 초안을 쓰는 데스크톱 앱 (macOS · Windows · Linux)",
+  "main": "dist/main.js",
+  "scripts": {
+    "test": "tsc && node --test \"dist/**/*.test.js\"",
+    "build": "tsc",
+    "start": "tsc && electron .",
+    "send-as-me": "tsc && node dist/scripts/send-as-me.js",
+    "persona:collect": "tsc && node dist/persona/collect.js",
+    "persona:analyze": "tsc && node dist/persona/analyze.js",
+    "ctl": "node --no-warnings dist/ctl/index.js"
+  },
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@slack/bolt": "^4.7.3",
+    "@slack/web-api": "^7.19.0",
+    "dotenv": "^18.0.7"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "electron": "^44.7.2",
+    "typescript": "^7.0.2"
+  },
+  "engines": {
+    "node": ">=22.5"
+  },
+  "private": true
+}

@@ -1,0 +1,27 @@
+import { contextBridge, ipcRenderer } from 'electron';
+
+contextBridge.exposeInMainWorld('slmmury', {
+  platform: process.platform,
+  getState: () => ipcRenderer.invoke('state:get'),
+  setSetting: (key: string, value: string) => ipcRenderer.invoke('settings:set', key, value),
+  setWatchMode: (key: string, mode: string) => ipcRenderer.invoke('watch:setMode', key, mode),
+  setWatchLlm: (key: string, model: string | null, effort: string | null) => ipcRenderer.invoke('watch:setLlm', key, model, effort),
+  getConversation: (key: string) => ipcRenderer.invoke('conversation:get', key),
+  summarize: (key: string) => ipcRenderer.invoke('summary:run', key),
+  summarizeStale: () => ipcRenderer.invoke('summary:runStale'),
+  addLink: (url: string) => ipcRenderer.invoke('link:add', url),
+  sendDraft: (id: number, text: string) => ipcRenderer.invoke('draft:send', id, text),
+  ignoreDraft: (id: number) => ipcRenderer.invoke('draft:ignore', id),
+  onChange: (cb: () => void) => ipcRenderer.on('state:changed', () => cb()),
+  setup: {
+    status: () => ipcRenderer.invoke('setup:status'),
+    saveTokens: (userToken: string, appToken: string) => ipcRenderer.invoke('setup:saveTokens', { userToken, appToken }),
+    learn: (months: number) => ipcRenderer.invoke('setup:learn', months),
+    start: () => ipcRenderer.invoke('setup:start'),
+    manifest: (o: object) => ipcRenderer.invoke('setup:manifest', o),
+    scopes: () => ipcRenderer.invoke('setup:scopes'),
+    copy: (text: string) => ipcRenderer.invoke('setup:copy', text),
+    openSlack: (url: string) => ipcRenderer.invoke('setup:openSlack', url),
+    onLog: (cb: (line: string) => void) => ipcRenderer.on('setup:log', (_e, line: string) => cb(line)),
+  },
+});
