@@ -158,6 +158,8 @@
     .msg.mine { align-self: flex-end; }
     .msg.mine .who { text-align: right; }
     .msg.mine .text { background: var(--brand); color: #fff; border-radius: 14px 4px 14px 14px; }
+    .msg .text a { color: var(--brand); text-decoration: underline; cursor: pointer; }
+    .msg.mine .text a { color: #fff; }
     .event { align-self: center; max-width: 86%; font-size: 12px; color: var(--sub); background: var(--bg); border: 1px dashed var(--line); border-radius: 10px; padding: 6px 12px; white-space: pre-wrap; }
     .timeline .draft { align-self: stretch; margin: 0; }
     /* 공통 로딩: 상단 진행 바 + 버튼 스피너 */
@@ -497,6 +499,12 @@
     document.body.classList.add(api.platform);
     const $ = (id) => document.getElementById(id);
     const el = (tag, props = {}, ...children) => { const e = Object.assign(document.createElement(tag), props); e.append(...children); return e; };
+    // 메시지 조각 → 글자 또는 링크. 클릭은 브라우저로, 우클릭은 열기·복사 메뉴
+    const partNode = (p) => !p.url ? p.text : el('a', {
+      textContent: p.text, href: p.url, title: p.url,
+      onclick: (e) => { e.preventDefault(); api.openLink(p.url).catch((err) => toast(errText(err), 'err')); },
+      oncontextmenu: (e) => { e.preventDefault(); e.stopPropagation(); api.linkMenu(p.url, p.text); },
+    });
     const STATUS = { pending: '승인 대기', escalated: '⚠️ 직접 확인', scheduled: '자동 전송 예약', sent: '보냄', ignored: '무시함', skipped: '내 차례 아님', superseded: '새 메시지로 대체됨', stale: '대화가 바뀌어 취소' };
     const OPEN = ['pending', 'escalated', 'scheduled'];
     const MODE = { on: 'ON', draft: '초안만', off: 'OFF' };
@@ -674,7 +682,7 @@
       const items = [
         ...conv.messages.map((m) => ({ t: Number(m.ts) * 1000, node: el('div', { className: `msg ${m.user === conv.me ? 'mine' : ''}` },
           el('div', { className: 'who', textContent: `${m.user === conv.me ? '나' : m.name}${sentTs.has(m.ts) ? ' · Slmmury가 보냄' : ''} · ${time(m.ts)}` }),
-          el('div', { className: 'text', textContent: m.text })) })),
+          el('div', { className: 'text' }, ...m.parts.map(partNode))) })),
         ...conv.drafts.map((d) => ({ t: d.created_at, node: OPEN.includes(d.status) ? draftCard(d)
           : el('div', { className: 'event', textContent: `🤖 ${STATUS[d.status]} · ${d.category} · 위험 ${d.risk} — ${d.reason}${d.draft_text ? `\n초안: ${d.final_text ?? d.draft_text}` : ''}` }) })),
       ].sort((a, b) => a.t - b.t);

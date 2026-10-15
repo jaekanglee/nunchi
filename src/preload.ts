@@ -16,6 +16,8 @@ contextBridge.exposeInMainWorld('slmmury', {
   watchMenu: (key: string) => ipcRenderer.invoke('watch:contextMenu', key),
   requestDraft: (key: string, hint: string) => ipcRenderer.invoke('draft:request', key, hint),
   openSlack: (key: string) => ipcRenderer.invoke('watch:openSlack', key),
+  openLink: (url: string) => ipcRenderer.invoke('link:open', url),
+  linkMenu: (url: string, text: string) => ipcRenderer.invoke('link:contextMenu', url, text),
   onToast: (cb: (text: string) => void) => ipcRenderer.on('toast', (_e, text: string) => cb(text)),
   setup: {
     status: () => ipcRenderer.invoke('setup:status'),

@@ -13,6 +13,7 @@ import { DB_PATH } from './paths.js';
 import { checkClaude, loadTokens, saveTokens, verifyTokens, type Tokens } from './setup.js';
 import { collectPersona } from './persona/collect.js';
 import { analyzePersona } from './persona/analyze.js';
+import { toParts } from './slack/mrkdwn.js';
 import { buildDeepLink, buildPermalink } from './slack/permalink.js';
 import { SCOPES, buildManifest, createAppUrl, toYaml, type ManifestOptions } from './slack/manifest.js';
 
@@ -61,7 +62,7 @@ async function boot() {
     const summary = store.latestSummary(key);
     return {
       me: myUserId,
-      messages,
+      messages: messages.map((m) => ({ ...m, parts: toParts(m.text) })),
       drafts: store.listDraftsByKey(key),
       summary: summary && { ...JSON.parse(summary.body), basis_ts: summary.basis_ts, created_at: summary.created_at },
     };
@@ -121,6 +122,21 @@ async function boot() {
     return { yaml: toYaml(m), url: createAppUrl(m) };
   });
   ipcMain.handle('setup:scopes', () => SCOPES);
+  // 메시지 속 링크: 클릭하면 기본 브라우저로, 우클릭하면 열기·복사 메뉴
+  const safeUrl = (url: string) => {
+    if (!/^(https?:|mailto:)/i.test(url)) throw new Error('열 수 없는 주소입니다');
+    return url;
+  };
+  ipcMain.handle('link:open', (_ev, url: string) => shell.openExternal(safeUrl(url)));
+  ipcMain.handle('link:contextMenu', (_ev, url: string, text: string) => {
+    safeUrl(url);
+    const items: Electron.MenuItemConstructorOptions[] = [
+      { label: '링크 열기', click: () => void shell.openExternal(url) },
+      { label: '링크 주소 복사', click: () => clipboard.writeText(url) },
+    ];
+    if (text && text !== url) items.push({ label: '링크 텍스트 복사', click: () => clipboard.writeText(text) });
+    Menu.buildFromTemplate(items).popup();
+  });
   ipcMain.handle('setup:copy', (_ev, text: string) => clipboard.writeText(text));
   // Slack 페이지만 연다
   ipcMain.handle('setup:openSlack', (_ev, url: string) => {
