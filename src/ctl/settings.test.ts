@@ -18,3 +18,11 @@ test('그룹 멘션 설정: S로 시작하는 ID 목록 또는 none', () => {
   assert.deepEqual(parseGroups('S1,S2'), ['S1', 'S2']);
   assert.deepEqual(parseGroups('none'), []);
 });
+
+test('타이밍 설정: 범위 안의 정수 초만', () => {
+  assert.equal(validateSetting('urgentDelaySec', '10'), null);
+  assert.equal(validateSetting('autoSendMinSec', '0'), null);
+  assert.match(validateSetting('urgentDelaySec', '1')!, /3~600/);
+  assert.match(validateSetting('batchDelaySec', '1.5')!, /정수/);
+  assert.match(validateSetting('autoSendMaxSec', '99999')!, /0~3600/);
+});

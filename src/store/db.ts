@@ -17,6 +17,10 @@ export type Watch = {
   last_text: string | null;
   model: string | null; // null이면 전역 기본값
   effort: string | null;
+  topic: string | null; // LLM이 붙인 짧은 주제 (목록 제목)
+  channel_name: string | null; // #채널 이름, DM, 그룹 DM
+  first_ts: string | null; // 대화 시작 시각 (스레드는 본문, DM은 읽은 것 중 가장 오래된 메시지)
+  participants: string | null; // 참여자 이름 JSON 배열
 };
 export type Summary = { id: number; key: string; basis_ts: string; body: string; created_at: number };
 export type SummaryState = 'none' | 'fresh' | 'outdated';
@@ -73,7 +77,7 @@ export function openStore(file: string) {
   `);
   // 이전 버전 DB에 없는 컬럼 추가
   const cols = (db.prepare('PRAGMA table_info(watches)').all() as { name: string }[]).map((c) => c.name);
-  for (const col of ['title', 'last_ts', 'last_name', 'last_text', 'model', 'effort']) {
+  for (const col of ['title', 'last_ts', 'last_name', 'last_text', 'model', 'effort', 'topic', 'channel_name', 'first_ts', 'participants']) {
     if (!cols.includes(col)) db.exec(`ALTER TABLE watches ADD COLUMN ${col} TEXT`);
   }
   const draftCols = (db.prepare('PRAGMA table_info(drafts)').all() as { name: string }[]).map((c) => c.name);
@@ -109,6 +113,20 @@ export function openStore(file: string) {
     },
     setWatchTitle(key: string, title: string) {
       db.prepare('UPDATE watches SET title = ? WHERE key = ?').run(title, key);
+    },
+    // onlyIfEmpty: 판단·초안에서 나온 주제는 처음 한 번만, 요약에서 나온 주제는 항상 덮어쓴다
+    setWatchTopic(key: string, topic: string, onlyIfEmpty = false) {
+      if (!topic.trim()) return;
+      db.prepare(`UPDATE watches SET topic = ? WHERE key = ?${onlyIfEmpty ? ' AND topic IS NULL' : ''}`).run(topic.trim(), key);
+    },
+    setChannelName(key: string, name: string) {
+      db.prepare('UPDATE watches SET channel_name = ? WHERE key = ?').run(name, key);
+    },
+    // 참여자는 새로 읽은 것으로 바꾸고, 시작 시각은 더 이른 것만 남긴다
+    setParticipants(key: string, firstTs: string, names: string[]) {
+      db.prepare(
+        'UPDATE watches SET participants = ?, first_ts = CASE WHEN first_ts IS NULL OR CAST(? AS REAL) < CAST(first_ts AS REAL) THEN ? ELSE first_ts END WHERE key = ?',
+      ).run(JSON.stringify(names), firstTs, firstTs, key);
     },
     // 더 최신 메시지일 때만 갱신
     setLastMessage(key: string, ts: string, name: string, text: string) {

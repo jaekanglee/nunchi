@@ -7,7 +7,7 @@ export async function startGateway(opts: {
   userToken: string;
   appToken: string;
   onMessage: (event: MessageEvent) => void;
-}): Promise<{ app: App; myUserId: string }> {
+}): Promise<{ app: App; myUserId: string; teamUrl: string; teamId: string }> {
   const app = new App({
     token: opts.userToken,
     appToken: opts.appToken,
@@ -25,5 +25,5 @@ export async function startGateway(opts: {
   });
 
   await app.start();
-  return { app, myUserId };
+  return { app, myUserId, teamUrl: auth.url as string, teamId: auth.team_id as string };
 }

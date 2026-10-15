@@ -2,7 +2,7 @@
 import type { WebClient } from '@slack/web-api';
 import { addressedToOthersOnly, isUrgent, route, threadKey, type MessageEvent } from './slack/router.js';
 import { parsePermalink } from './slack/permalink.js';
-import { conversationTitle, type ConversationReader } from './slack/conversation.js';
+import { conversationTitle, participantNames, type ConversationReader } from './slack/conversation.js';
 import { generateDraft } from './responder/draft.js';
 import { judgeTurn } from './responder/judge.js';
 import { decide, holdReasons, type SendMode } from './responder/policy.js';
@@ -11,11 +11,8 @@ import { summarizeConversation } from './summary/summarize.js';
 import type { ThreadMessage } from './responder/prompt.js';
 import type { Store } from './store/db.js';
 import { resolveLlm, type Llm } from './llm/claude.js';
-import { parseGroups } from './ctl/settings.js';
+import { SETTINGS, parseGroups } from './ctl/settings.js';
 
-const DEBOUNCE_MS = 10_000; // 연달아 오는 메시지는 모아서 한 번만 처리
-const BATCH_MS = 120_000; // 감시 스레드에서 나를 부르지 않은 댓글은 2분 동안 모아서 처리
-const AUTO_DELAY_MS = [60_000, 300_000]; // 자동 전송 지연 1~5분
 const SUMMARY_KEEP = 300; // 요약은 긴 스레드도 최근 300개까지 읽는다
 
 export type EngineDeps = {
@@ -46,22 +43,73 @@ export function createEngine(deps: EngineDeps) {
     return resolveLlm(store.getWatch(key), global);
   }
 
-  // 대화를 읽을 때마다 목록용 제목과 마지막 메시지를 갱신
+  // 대화를 읽을 때마다 목록용 제목·참여자·시작 시각·마지막 메시지를 갱신
   function remember(key: string, thread: ThreadMessage[], isDm: boolean) {
     store.setWatchTitle(key, conversationTitle(thread, isDm, myUserId));
     const last = thread.at(-1);
     if (last) store.setLastMessage(key, last.ts, last.user === myUserId ? '나' : last.name, last.text);
+    if (thread[0]) store.setParticipants(key, thread[0].ts, participantNames(thread, myUserId));
+    void ensureChannelName(key);
+  }
+
+  // 채널 이름은 한 번만 찾는다. conversations.info는 channels:read 권한이 필요해서, 이미 있는 search 권한으로 찾는다
+  async function ensureChannelName(key: string) {
+    const w = store.getWatch(key);
+    if (!w || w.channel_name) return;
+    if (w.channel.startsWith('D')) return store.setChannelName(key, 'DM');
+    try {
+      const r = await client.search.messages({ query: `in:<#${w.channel}>`, count: 1 });
+      const ch = r.messages?.matches?.[0]?.channel as { name?: string; is_mpim?: boolean } | undefined;
+      if (ch?.name) store.setChannelName(key, ch.is_mpim ? '그룹 DM' : `#${ch.name}`);
+    } catch (err) {
+      console.warn(`[engine] ${key} 채널 이름 조회 실패`, (err as Error).message);
+    }
   }
   const timers = new Map<string, NodeJS.Timeout>();
   const running = new Set<string>();
+  const sendDue = new Map<number, number>(); // 자동 전송 예약 시각 (draft id → ms)
+  const summarizing = new Set<string>(); // 화면 로딩 표시용
+  const drafting = new Set<string>();
+
+  // 오래 걸리는 작업을 하는 동안 화면에 "…중"을 보이게 한다
+  async function track<T>(set: Set<string>, key: string, fn: () => Promise<T>): Promise<T> {
+    set.add(key);
+    deps.onChange();
+    try {
+      return await fn();
+    } finally {
+      set.delete(key);
+      deps.onChange();
+    }
+  }
+
+  // 앱이 꺼지면 예약 타이머도 사라지므로, 남아 있던 예약은 승인 대기로 돌린다
+  for (const d of store.listOpenDrafts()) if (d.status === 'scheduled') store.setDraftStatus(d.id, 'pending');
+
+  // 목록 정보(채널·참여자·시작 시각)가 없는 예전 대화는 시작할 때 한 번 채운다
+  void (async () => {
+    for (const w of store.listWatches().filter((x) => !x.participants || !x.channel_name)) {
+      try {
+        remember(w.key, await read(w.channel, w.root_ts), w.root_ts === null);
+      } catch (err) {
+        console.warn(`[engine] ${w.key} 목록 정보 채우기 실패`, (err as Error).message);
+      }
+    }
+    deps.onChange();
+  })();
   const rerun = new Set<string>();
 
   const due = new Map<string, number>();
 
-  // 급한 메시지는 10초 디바운스, 나머지는 첫 댓글부터 2분 창을 유지한다 (댓글이 계속 와도 무한히 밀리지 않게)
-  function schedule(key: string, delay = DEBOUNCE_MS) {
+  // 타이밍 설정(초)을 ms로. 설정 화면·ctl에서 바꾸면 다음 메시지부터 바로 반영된다
+  const ms = (key: string) => Number(store.getSetting(key, SETTINGS[key].fallback)) * 1000;
+
+  // urgent(나를 부름·DM)는 디바운스: 새 메시지가 오면 다시 잰다.
+  // batch(나머지 댓글)는 첫 댓글부터 창을 유지한다 (댓글이 계속 와도 무한히 밀리지 않게)
+  function schedule(key: string, kind: 'urgent' | 'batch' = 'urgent') {
+    const delay = ms(kind === 'urgent' ? 'urgentDelaySec' : 'batchDelaySec');
     const at = Date.now() + delay;
-    if (delay > DEBOUNCE_MS && timers.has(key) && due.get(key)! <= at) return;
+    if (kind === 'batch' && timers.has(key) && due.get(key)! <= at) return;
     clearTimeout(timers.get(key));
     due.set(key, at);
     timers.set(key, setTimeout(() => {
@@ -105,12 +153,14 @@ export function createEngine(deps: EngineDeps) {
       const main = llmFor(key, 'draft');
       if (rootTs !== null && judgeModel !== 'off' && judgeModel !== main.model) {
         const j = await judgeTurn(thread, deps.persona, myUserId, { model: judgeModel, effort: 'low' });
+        store.setWatchTopic(key, j.topic, true);
         if (!j.needs_my_reply) return skipWithoutDraft(key, channel, rootTs, last.ts, '1차 판단', j.reason);
       }
 
       const result = await generateDraft(thread, deps.persona, myUserId, main);
       const sendMode: SendMode = watch.mode === 'draft' ? 'draft' : (store.getSetting('sendMode', 'draft') as SendMode);
       const decision = decide(result, sendMode);
+      store.setWatchTopic(key, result.topic, true);
       // 대화별 '초안만'과 전역 초안 모드를 구분해서 보여준다
       const hold = holdReasons(result, sendMode).map((r) => (r === '전송 설정이 초안 모드' && watch.mode === 'draft' ? "이 대화가 '초안만'" : r));
 
@@ -133,8 +183,13 @@ export function createEngine(deps: EngineDeps) {
       if (decision === 'escalate') deps.notify(`⚠️ 직접 확인 필요 · ${last.name}`, `${last.text}\n— ${result.reason}`);
       if (decision === 'approve') deps.notify(`초안 승인 대기 · ${last.name}`, `${result.reply}\n— 자동 전송 안 함: ${hold.join(' · ')}`);
       if (decision === 'auto') {
-        const [min, max] = AUTO_DELAY_MS;
-        setTimeout(() => void sendIfFresh(id), min + Math.random() * (max - min));
+        const [min, max] = [ms('autoSendMinSec'), ms('autoSendMaxSec')].sort((a, b) => a - b);
+        const delay = min + Math.random() * (max - min);
+        sendDue.set(id, Date.now() + delay);
+        setTimeout(() => {
+          sendDue.delete(id);
+          void sendIfFresh(id);
+        }, delay);
       }
       deps.onChange();
     } catch (err) {
@@ -174,7 +229,11 @@ export function createEngine(deps: EngineDeps) {
     await post(id, d.draft_text);
   }
 
-  async function summarize(key: string) {
+  function summarize(key: string) {
+    return track(summarizing, key, () => summarizeNow(key));
+  }
+
+  async function summarizeNow(key: string) {
     const w = store.getWatch(key);
     if (!w) throw new Error('감시 중인 대화가 아닙니다');
     const thread = await read(w.channel, w.root_ts, SUMMARY_KEEP);
@@ -183,6 +242,7 @@ export function createEngine(deps: EngineDeps) {
     remember(key, thread, w.root_ts === null);
     const summary = await summarizeConversation(thread, myUserId, llmFor(key, 'summary'));
     store.insertSummary(key, last.ts, summary);
+    store.setWatchTopic(key, summary.topic);
     deps.onChange();
   }
 
@@ -195,7 +255,38 @@ export function createEngine(deps: EngineDeps) {
     return targets.length;
   }
 
+  // 화면의 "답장 초안 만들기": 차례 판단 없이 초안을 쓰고, 자동 전송 없이 항상 승인 대기로 둔다
+  async function requestDraftNow(key: string, hint: string) {
+    const w = store.getWatch(key);
+    if (!w) throw new Error('감시 중인 대화가 아닙니다');
+    const thread = await read(w.channel, w.root_ts);
+    remember(key, thread, w.root_ts === null);
+    const last = thread.at(-1);
+    if (!last) throw new Error('대화에 메시지가 없습니다');
+    const result = await generateDraft(thread, deps.persona, myUserId, llmFor(key, 'draft'), hint);
+    if (!result.reply) throw new Error('초안을 만들지 못했습니다');
+    const decision = decide({ ...result, needs_my_reply: true }, 'draft');
+    store.supersedeOpen(key);
+    store.insertDraft({
+      key, channel: w.channel, root_ts: w.root_ts, basis_ts: last.ts,
+      category: result.category, risk: result.risk, confidence: result.confidence, reason: result.reason,
+      draft_text: result.reply, status: decision === 'escalate' ? 'escalated' : 'pending',
+      hold_reason: ['직접 요청한 초안', ...holdReasons(result, 'draft').filter((r) => r !== '전송 설정이 초안 모드')].join(' · '),
+    });
+  }
+
   return {
+    // 화면 카운트다운용: 판단 예정 시각(대화별), 판단 중인 대화, 자동 전송 예정 시각(초안별)
+    timers() {
+      return {
+        judge: Object.fromEntries(due),
+        running: [...running],
+        send: Object.fromEntries(sendDue),
+        summarizing: [...summarizing],
+        drafting: [...drafting],
+      };
+    },
+
     async handleEvent(e: MessageEvent) {
       const key = threadKey(e);
       // 감시 중인 대화면 마지막 메시지를 목록에 반영
@@ -219,7 +310,7 @@ export function createEngine(deps: EngineDeps) {
       const { channel, rootTs } = splitKey(key);
       if (reason === 'watched') store.touchWatch(key);
       else store.addWatch(key, channel, rootTs, reason);
-      schedule(key, isUrgent(e, myUserId, parseGroups(store.getSetting('mentionGroups', 'none'))) ? DEBOUNCE_MS : BATCH_MS);
+      schedule(key, isUrgent(e, myUserId, parseGroups(store.getSetting('mentionGroups', 'none'))) ? 'urgent' : 'batch');
       deps.onChange();
     },
 
@@ -237,6 +328,10 @@ export function createEngine(deps: EngineDeps) {
 
     summarize,
     summarizeStale,
+
+    requestDraft(key: string, hint: string) {
+      return track(drafting, key, () => requestDraftNow(key, hint));
+    },
     read,
     remember,
     send: post,

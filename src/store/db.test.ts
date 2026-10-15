@@ -84,3 +84,17 @@ test('링크로 등록하면 source가 link가 되고, 이후 자동 감지로 �
   s.addWatch('C1:1.0', 'C1', '1.0', 'group_mention');
   assert.equal(s.getWatch('C1:1.0')?.source, 'link');
 });
+
+test('목록 정보: 주제는 요약이 덮어쓰고, 시작 시각은 더 이른 것만 남는다', () => {
+  const s = openStore(':memory:');
+  s.addWatch('C1:1.0', 'C1', '1.0', 'mention');
+  s.setWatchTopic('C1:1.0', '주문 알림 중복', true);
+  s.setWatchTopic('C1:1.0', '다른 주제', true);
+  assert.equal(s.getWatch('C1:1.0')?.topic, '주문 알림 중복');
+  s.setWatchTopic('C1:1.0', '푸시 필터 버그');
+  assert.equal(s.getWatch('C1:1.0')?.topic, '푸시 필터 버그');
+  s.setParticipants('C1:1.0', '5.0', ['지수', '나']);
+  s.setParticipants('C1:1.0', '7.0', ['지수', '서연', '나']);
+  assert.equal(s.getWatch('C1:1.0')?.first_ts, '5.0');
+  assert.deepEqual(JSON.parse(s.getWatch('C1:1.0')!.participants!), ['지수', '서연', '나']);
+});

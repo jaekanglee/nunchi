@@ -1,6 +1,6 @@
 import 'dotenv/config';
 import path from 'node:path';
-import { app, BrowserWindow, clipboard, ipcMain, Notification, shell } from 'electron';
+import { app, BrowserWindow, clipboard, ipcMain, Menu, Notification, shell } from 'electron';
 import { startGateway } from './slack/gateway.js';
 import { createConversationReader } from './slack/conversation.js';
 import { hasPersona, loadPersona } from './responder/draft.js';
@@ -12,6 +12,7 @@ import { DB_PATH } from './paths.js';
 import { checkClaude, loadTokens, saveTokens, verifyTokens, type Tokens } from './setup.js';
 import { collectPersona } from './persona/collect.js';
 import { analyzePersona } from './persona/analyze.js';
+import { buildDeepLink, buildPermalink } from './slack/permalink.js';
 import { SCOPES, buildManifest, createAppUrl, toYaml, type ManifestOptions } from './slack/manifest.js';
 
 async function boot() {
@@ -19,6 +20,8 @@ async function boot() {
 
   // 화면이 뜨자마자 상태를 요청하므로 IPC 핸들러를 먼저 등록한다
   let myUserId = '';
+  let teamUrl = '';
+  let teamId = '';
   let engine: ReturnType<typeof createEngine> | undefined;
   const ready = () => {
     if (!engine) throw new Error('Slack 연결 중입니다');
@@ -31,6 +34,7 @@ async function boot() {
     efforts: EFFORTS,
     openDrafts: store.listOpenDrafts(),
     watches: store.listWatches(),
+    timers: engine?.timers() ?? { judge: {}, running: [], send: {} },
   }));
   ipcMain.handle('settings:set', (_ev, key: string, value: string) => {
     const err = validateSetting(key, value);
@@ -59,6 +63,30 @@ async function boot() {
       drafts: store.listDraftsByKey(key),
       summary: summary && { ...JSON.parse(summary.body), basis_ts: summary.basis_ts, created_at: summary.created_at },
     };
+  });
+  // 대화 목록 우클릭 메뉴. 항목은 여기에 추가한다
+  ipcMain.handle('watch:contextMenu', (_ev, key: string) => {
+    const w = store.getWatch(key);
+    if (!w) return;
+    const openApp = () => void shell.openExternal(buildDeepLink(teamId, w.channel, w.root_ts));
+    Menu.buildFromTemplate([
+      { label: 'Slack 앱에서 열기', enabled: teamId !== '', click: openApp },
+      { label: '브라우저로 열기', enabled: teamUrl !== '', click: () => void shell.openExternal(buildPermalink(teamUrl, w.channel, w.root_ts)) },
+      { type: 'separator' },
+      {
+        label: '원문 링크 복사',
+        enabled: teamUrl !== '',
+        click: () => {
+          clipboard.writeText(buildPermalink(teamUrl, w.channel, w.root_ts));
+          win.webContents.send('toast', '원문 링크를 복사했습니다');
+        },
+      },
+    ]).popup({ window: win });
+  });
+  ipcMain.handle('draft:request', (_ev, key: string, hint: string) => ready().requestDraft(key, hint));
+  ipcMain.handle('watch:openSlack', (_ev, key: string) => {
+    const w = store.getWatch(key);
+    if (w && teamId) return shell.openExternal(buildDeepLink(teamId, w.channel, w.root_ts));
   });
   ipcMain.handle('summary:run', (_ev, key: string) => ready().summarize(key));
   ipcMain.handle('summary:runStale', () => ready().summarizeStale());
@@ -131,6 +159,8 @@ async function boot() {
       onMessage: (e) => void engine?.handleEvent(e).catch((err) => console.error("[engine] 이벤트 처리 실패", err)),
     });
     myUserId = gateway.myUserId;
+    teamUrl = gateway.teamUrl;
+    teamId = gateway.teamId;
     engine = createEngine({
       client: gateway.app.client,
       myUserId,
@@ -151,9 +181,20 @@ async function boot() {
 // Windows 알림은 AppUserModelID가 있어야 뜬다 (개발 실행은 electron.exe 경로를 쓴다)
 if (process.platform === 'win32') app.setAppUserModelId(process.execPath);
 
-app.whenReady().then(boot).catch((err) => {
-  console.error(err);
+// 두 번 실행되면 같은 메시지에 자동 전송도 두 번 나간다. 이미 떠 있으면 그 창을 앞으로 가져오고 끝낸다
+if (!app.requestSingleInstanceLock()) {
+  console.log('Slmmury가 이미 실행 중입니다');
   app.quit();
-});
+} else {
+  app.on('second-instance', () => {
+    const win = BrowserWindow.getAllWindows()[0];
+    if (win?.isMinimized()) win.restore();
+    win?.focus();
+  });
+  app.whenReady().then(boot).catch((err) => {
+    console.error(err);
+    app.quit();
+  });
+}
 
 app.on('window-all-closed', () => app.quit());

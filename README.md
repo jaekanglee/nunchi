@@ -22,7 +22,8 @@
 git clone <이 저장소> slmmury
 cd slmmury
 npm install
-npm start
+npm link        # slmmury 명령 등록 (한 번만)
+slmmury start
 ```
 
 처음 켜면 설정 화면이 뜹니다. 순서대로 따라 하면 됩니다.
@@ -51,18 +52,27 @@ npm start
   - 업무지시, 장애, 민감한 건, 모르는 사실이 필요한 건은 항상 직접 확인으로 보냅니다.
 - **대화별 설정**: ON / 초안만 / OFF, 모델·effort를 대화마다 바꿀 수 있습니다.
 
-## 원격 제어 (SSH)
+## slmmury 명령
 
-앱이 켜져 있는 컴퓨터에 SSH로 들어와서 저장소 폴더에서 실행합니다. Windows는 OpenSSH 서버를 켜면 같은 명령을 씁니다. 재시작 없이 바로 반영됩니다.
+`npm link`로 등록하면 어느 폴더에서든 씁니다. SSH로 들어와서도 같은 명령을 씁니다. Windows는 OpenSSH 서버를 켜면 됩니다.
 
 ```bash
-npm run ctl -- status                       # 설정, 감시 중인 대화, 처리 필요 초안
-npm run ctl -- pause | resume               # 전체 일시정지 / 재개
-npm run ctl -- set sendMode draft           # draft | auto
-npm run ctl -- set mentionGroups S0123ABCD  # 쉼표로 여러 개, none이면 끔
-npm run ctl -- watch 3 off                  # 대화별 on | draft | off
-npm run ctl -- drafts                       # 처리 필요 초안 본문
+slmmury start            # 백그라운드로 실행
+slmmury stop | restart
+slmmury logs [-f]        # 최근 로그 (-f: 계속 보기)
+slmmury update           # git pull → npm install → 빌드 → 실행 중이면 재시작
+slmmury doctor           # Node, Claude Code 로그인, 토큰, 말투 데이터 점검
+
+slmmury status           # 설정, 감시 중인 대화, 처리 필요 초안
+slmmury pause | resume   # 전체 일시정지 / 재개
+slmmury set sendMode draft           # draft | auto
+slmmury set mentionGroups S0123ABCD  # 쉼표로 여러 개, none이면 끔
+slmmury set autoSendMinSec 30        # 타이밍(초): urgentDelaySec, batchDelaySec, autoSendMinSec, autoSendMaxSec
+slmmury watch 3 off      # 대화별 on | draft | off
+slmmury drafts           # 처리 필요 초안 본문
 ```
+
+설정은 재시작 없이 바로 반영됩니다. 앱은 하나만 뜨게 되어 있어서, 두 번 실행하면 두 번째는 바로 끝납니다. `npm link` 없이 쓰려면 저장소 폴더에서 `node bin/slmmury.js <명령>`을 실행하세요.
 
 ## 데이터 위치
 

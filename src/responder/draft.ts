@@ -7,7 +7,7 @@ import type { Pair } from '../persona/pairs.js';
 import { CATEGORIES, type Assessment } from './policy.js';
 import { buildPrompt, type Persona, type ThreadMessage } from './prompt.js';
 
-export type DraftResult = Assessment & { reply: string; reason: string };
+export type DraftResult = Assessment & { reply: string; reason: string; topic: string };
 
 const SYSTEM = `너는 Slack에서 한 사람("나")을 대신해 답장 초안을 쓰는 비서다. 초안은 "나"가 직접 쓴 것처럼 보여야 한다.
 
@@ -25,12 +25,13 @@ const SYSTEM = `너는 Slack에서 한 사람("나")을 대신해 답장 초안�
 - risk: 이 답장을 내가 확인 없이 보냈을 때 문제가 될 가능성 (0~100).
 - confidence: 초안이 내 말투와 의도에 맞을 확신 (0~1).
 - needs_my_reply가 false면 reply는 빈 문자열로 둔다.
-- reason: 판단 이유를 한두 문장으로.`;
+- reason: 판단 이유를 한두 문장으로.
+- topic: 이 대화의 주제를 15자 안팎 명사구로 (예: "예약건 푸시 필터 버그", "다음 배포 일정"). 대화 목록 제목으로 쓴다.`;
 
 const SCHEMA = {
   type: 'object',
   additionalProperties: false,
-  required: ['needs_my_reply', 'category', 'risk', 'needs_facts_i_dont_know', 'confidence', 'reply', 'reason'],
+  required: ['needs_my_reply', 'category', 'risk', 'needs_facts_i_dont_know', 'confidence', 'reply', 'reason', 'topic'],
   properties: {
     needs_my_reply: { type: 'boolean' },
     category: { type: 'string', enum: CATEGORIES },
@@ -39,6 +40,7 @@ const SCHEMA = {
     confidence: { type: 'number', minimum: 0, maximum: 1 },
     reply: { type: 'string' },
     reason: { type: 'string' },
+    topic: { type: 'string' },
   },
 };
 
@@ -55,11 +57,13 @@ export function loadPersona(dir = PERSONA_DIR): Persona {
   };
 }
 
-export async function generateDraft(thread: ThreadMessage[], persona: Persona, myUserId: string, llm?: Llm): Promise<DraftResult> {
+// request: 내가 화면에서 직접 요청한 초안이면 해야 할 일. 이때는 차례 판단과 상관없이 답장을 쓴다
+export async function generateDraft(thread: ThreadMessage[], persona: Persona, myUserId: string, llm?: Llm, request?: string): Promise<DraftResult> {
   const { context, conversation } = buildPrompt(thread, persona, myUserId);
+  const asked = request === undefined ? '' : `\n\n# 내가 직접 요청한 초안\n지금 이 대화에 내가 답장을 보내려 한다. needs_my_reply는 true로 두고 reply를 반드시 쓴다.${request ? `\n해야 할 일(요약 기준): ${request}` : ''}`;
   const { output } = await runClaude<DraftResult>({
     system: `${SYSTEM}\n\n${context}`,
-    prompt: conversation,
+    prompt: conversation + asked,
     schema: SCHEMA,
     llm,
   });

@@ -35,6 +35,12 @@ export function conversationTitle(messages: ThreadMessage[], isDm: boolean, myUs
   return `${root.user === myUserId ? '나' : root.name} · ${snippet.length > 40 ? snippet.slice(0, 40) + '…' : snippet}`;
 }
 
+// 목록에 보일 참여자: 처음 말한 순서대로, 나는 맨 끝에 "나"로
+export function participantNames(messages: ThreadMessage[], myUserId: string): string[] {
+  const others = [...new Set(messages.filter((m) => m.user !== myUserId).map((m) => m.name))];
+  return messages.some((m) => m.user === myUserId) ? [...others, '나'] : others;
+}
+
 // 나를 가리키는 멘션은 프롬프트의 [나]와 맞추기 위해 @나 로 쓴다
 export function createConversationReader(client: WebClient, myUserId: string, myGroups: () => string[] = () => []) {
   const names = new Map<string, string>();

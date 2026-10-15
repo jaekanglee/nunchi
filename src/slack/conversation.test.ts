@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { conversationTitle, readableGroupMentions, trimThread } from './conversation.js';
+import { conversationTitle, participantNames, readableGroupMentions, trimThread } from './conversation.js';
 
 test('페이지 합친 결과를 ts순 정렬·중복 제거하고 루트 + 최근 N개만 남긴다', () => {
   const page1 = [{ ts: '1' }, { ts: '2' }, { ts: '9' }];
@@ -25,4 +25,15 @@ test('그룹 멘션을 읽을 수 있게 바꾸고, 내가 속한 그룹은 표�
   assert.equal(readableGroupMentions('<!subteam^S0GROUP0001|@dev-team> 확인 부탁', ['S0GROUP0001']), '@dev-team(나 포함 그룹) 확인 부탁');
   assert.equal(readableGroupMentions('<!subteam^S0GROUP0001> 확인', ['S0GROUP0001']), '@그룹(나 포함 그룹) 확인');
   assert.equal(readableGroupMentions('<!subteam^S0GROUP0002|@qa> 공유', ['S0GROUP0001']), '@qa 공유');
+});
+
+test('participantNames: 말한 순서대로, 나는 끝에', () => {
+  const msgs = [
+    { ts: '1', user: 'UA', name: '지수', text: 'a' },
+    { ts: '2', user: 'UME', name: '민수', text: 'b' },
+    { ts: '3', user: 'UB', name: '서연', text: 'c' },
+    { ts: '4', user: 'UA', name: '지수', text: 'd' },
+  ];
+  assert.deepEqual(participantNames(msgs, 'UME'), ['지수', '서연', '나']);
+  assert.deepEqual(participantNames(msgs.filter((m) => m.user !== 'UME'), 'UME'), ['지수', '서연']);
 });
