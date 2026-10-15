@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { decide, holdReasons, type Assessment } from './policy.js';
+import { AUTO_ELIGIBLE, DEFAULT_THRESHOLDS, decide, holdReasons, type Assessment, type Category } from './policy.js';
 
 const safe: Assessment = { needs_my_reply: true, category: '단순확인·리액션', risk: 5, needs_facts_i_dont_know: false, confidence: 0.9 };
 
@@ -45,4 +45,18 @@ test('holdReasons: 자동으로 안 보낸 이유를 전부 알려준다', () =>
     "'장애·긴급'은 항상 직접 확인",
     '내가 모르는 사실이 필요함',
   ]);
+});
+
+test('설정한 기준으로 자동 전송 여부가 바뀐다', () => {
+  const loose = { autoCategories: ['인사/잡담', '단순확인·리액션', '정보질문'] as Category[], autoMaxRisk: 40, autoMinConfidence: 0.6, escalateRisk: 80 };
+  assert.equal(decide({ ...safe, category: '정보질문', risk: 30, confidence: 0.7 }, 'auto', loose), 'auto');
+  assert.equal(decide({ ...safe, risk: 70 }, 'auto', loose), 'approve'); // 기본 60이면 escalate
+  assert.equal(decide({ ...safe, risk: 80 }, 'auto', loose), 'escalate');
+  assert.equal(decide(safe, 'auto', { ...loose, autoCategories: [] }), 'approve');
+  assert.deepEqual(holdReasons(safe, 'auto', { ...loose, autoCategories: [] }), ["'단순확인·리액션'은 자동 전송 대상이 아님 (허용 카테고리 없음)"]);
+});
+
+test('위급·민감 카테고리는 설정으로 자동 전송 대상이 될 수 없다', () => {
+  assert.equal(AUTO_ELIGIBLE.includes('민감'), false);
+  assert.equal(decide({ ...safe, category: '민감' }, 'auto', { ...DEFAULT_THRESHOLDS, autoCategories: ['민감'], escalateRisk: 100 }), 'escalate');
 });

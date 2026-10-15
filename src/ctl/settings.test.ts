@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseGroups, validateSetting } from './settings.js';
+import { SETTINGS, parseGroups, thresholdsFrom, validateSetting } from './settings.js';
+import { DEFAULT_THRESHOLDS } from '../responder/policy.js';
 
 test('허용된 키·값만 통과', () => {
   assert.equal(validateSetting('sendMode', 'auto'), null);
@@ -25,4 +26,15 @@ test('타이밍 설정: 범위 안의 정수 초만', () => {
   assert.match(validateSetting('urgentDelaySec', '1')!, /3~600/);
   assert.match(validateSetting('batchDelaySec', '1.5')!, /정수/);
   assert.match(validateSetting('autoSendMaxSec', '99999')!, /0~3600/);
+});
+
+test('자동 전송 기준 설정', () => {
+  assert.equal(validateSetting('autoCategories', '인사/잡담,정보질문'), null);
+  assert.equal(validateSetting('autoCategories', 'none'), null);
+  assert.match(validateSetting('autoCategories', '민감')!, /쓸 수 없는 값/);
+  assert.equal(validateSetting('autoMinConfidence', '75'), null);
+  assert.match(validateSetting('autoMinConfidence', '0.8')!, /정수\(%\)/);
+  assert.match(validateSetting('escalateRisk', '0')!, /1~100/);
+  const get = (k: string) => SETTINGS[k].fallback;
+  assert.deepEqual(thresholdsFrom(get), DEFAULT_THRESHOLDS);
 });

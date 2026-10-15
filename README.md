@@ -47,7 +47,7 @@ slmmury start
 - **자동 감지**: DM, 그룹 DM, 나를 멘션한 메시지, 등록한 그룹의 멘션을 감시 대화로 등록합니다.
 - **링크 등록**: 메시지 링크를 붙여넣으면 그 대화를 처음부터 읽고, 이후 멘션이 없어도 계속 지켜봅니다.
 - **판정**:
-  - 잡담·단순확인이면서 위험 20 미만, 확신 0.8 이상이면 자동 모드에서 1~5분 뒤 전송합니다. 보내기 전에 대화가 바뀌었는지 다시 확인합니다.
+  - 잡담·단순확인이면서 위험 20 미만, 확신 0.8 이상이면 자동 모드에서 1~5분 뒤 전송합니다. 카테고리·위험·확신 기준은 설정 화면의 "자동 전송 기준"에서 바꿀 수 있습니다. 보내기 전에 대화가 바뀌었는지 다시 확인합니다.
   - 그 밖의 건은 승인 대기로 둡니다. 카드에 자동 전송하지 않은 이유가 나옵니다.
   - 업무지시, 장애, 민감한 건, 모르는 사실이 필요한 건은 항상 직접 확인으로 보냅니다.
 - **대화별 설정**: ON / 초안만 / OFF, 모델·effort를 대화마다 바꿀 수 있습니다.
@@ -68,6 +68,7 @@ slmmury pause | resume   # 전체 일시정지 / 재개
 slmmury set sendMode draft           # draft | auto
 slmmury set mentionGroups S0123ABCD  # 쉼표로 여러 개, none이면 끔
 slmmury set autoSendMinSec 30        # 타이밍(초): urgentDelaySec, batchDelaySec, autoSendMinSec, autoSendMaxSec
+slmmury set autoMaxRisk 30           # 자동 전송 기준: autoMaxRisk, autoMinConfidence(%), escalateRisk, autoCategories(쉼표 구분)
 slmmury watch 3 off      # 대화별 on | draft | off
 slmmury drafts           # 처리 필요 초안 본문
 ```

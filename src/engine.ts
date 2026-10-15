@@ -11,7 +11,7 @@ import { summarizeConversation } from './summary/summarize.js';
 import type { ThreadMessage } from './responder/prompt.js';
 import type { Store } from './store/db.js';
 import { resolveLlm, type Llm } from './llm/claude.js';
-import { SETTINGS, parseGroups } from './ctl/settings.js';
+import { SETTINGS, parseGroups, thresholdsFrom } from './ctl/settings.js';
 
 const SUMMARY_KEEP = 300; // 요약은 긴 스레드도 최근 300개까지 읽는다
 
@@ -102,7 +102,10 @@ export function createEngine(deps: EngineDeps) {
   const due = new Map<string, number>();
 
   // 타이밍 설정(초)을 ms로. 설정 화면·ctl에서 바꾸면 다음 메시지부터 바로 반영된다
-  const ms = (key: string) => Number(store.getSetting(key, SETTINGS[key].fallback)) * 1000;
+  const setting = (key: string) => store.getSetting(key, SETTINGS[key].fallback);
+  const ms = (key: string) => Number(setting(key)) * 1000;
+  // 자동 전송 기준도 판단할 때마다 읽어서 바로 반영
+  const thresholds = () => thresholdsFrom(setting);
 
   // urgent(나를 부름·DM)는 디바운스: 새 메시지가 오면 다시 잰다.
   // batch(나머지 댓글)는 첫 댓글부터 창을 유지한다 (댓글이 계속 와도 무한히 밀리지 않게)
@@ -159,10 +162,11 @@ export function createEngine(deps: EngineDeps) {
 
       const result = await generateDraft(thread, deps.persona, myUserId, main);
       const sendMode: SendMode = watch.mode === 'draft' ? 'draft' : (store.getSetting('sendMode', 'draft') as SendMode);
-      const decision = decide(result, sendMode);
+      const t = thresholds();
+      const decision = decide(result, sendMode, t);
       store.setWatchTopic(key, result.topic, true);
       // 대화별 '초안만'과 전역 초안 모드를 구분해서 보여준다
-      const hold = holdReasons(result, sendMode).map((r) => (r === '전송 설정이 초안 모드' && watch.mode === 'draft' ? "이 대화가 '초안만'" : r));
+      const hold = holdReasons(result, sendMode, t).map((r) => (r === '전송 설정이 초안 모드' && watch.mode === 'draft' ? "이 대화가 '초안만'" : r));
 
       store.supersedeOpen(key);
       const status = { skip: 'skipped', escalate: 'escalated', approve: 'pending', auto: 'scheduled' } as const;
@@ -265,13 +269,14 @@ export function createEngine(deps: EngineDeps) {
     if (!last) throw new Error('대화에 메시지가 없습니다');
     const result = await generateDraft(thread, deps.persona, myUserId, llmFor(key, 'draft'), hint);
     if (!result.reply) throw new Error('초안을 만들지 못했습니다');
-    const decision = decide({ ...result, needs_my_reply: true }, 'draft');
+    const t = thresholds();
+    const decision = decide({ ...result, needs_my_reply: true }, 'draft', t);
     store.supersedeOpen(key);
     store.insertDraft({
       key, channel: w.channel, root_ts: w.root_ts, basis_ts: last.ts,
       category: result.category, risk: result.risk, confidence: result.confidence, reason: result.reason,
       draft_text: result.reply, status: decision === 'escalate' ? 'escalated' : 'pending',
-      hold_reason: ['직접 요청한 초안', ...holdReasons(result, 'draft').filter((r) => r !== '전송 설정이 초안 모드')].join(' · '),
+      hold_reason: ['직접 요청한 초안', ...holdReasons(result, 'draft', t).filter((r) => r !== '전송 설정이 초안 모드')].join(' · '),
     });
   }
 

@@ -8,6 +8,7 @@ import { openStore, type WatchMode } from './store/db.js';
 import { createEngine } from './engine.js';
 import { EFFORTS, MODELS } from './llm/claude.js';
 import { SETTINGS, parseGroups, validateSetting } from './ctl/settings.js';
+import { AUTO_ELIGIBLE } from './responder/policy.js';
 import { DB_PATH } from './paths.js';
 import { checkClaude, loadTokens, saveTokens, verifyTokens, type Tokens } from './setup.js';
 import { collectPersona } from './persona/collect.js';
@@ -32,6 +33,7 @@ async function boot() {
     settings: Object.fromEntries(Object.entries(SETTINGS).map(([k, def]) => [k, store.getSetting(k, def.fallback)])),
     models: MODELS,
     efforts: EFFORTS,
+    autoEligible: AUTO_ELIGIBLE,
     openDrafts: store.listOpenDrafts(),
     watches: store.listWatches(),
     timers: engine?.timers() ?? { judge: {}, running: [], send: {} },

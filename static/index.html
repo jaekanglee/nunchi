@@ -320,6 +320,16 @@
       </div>
 
       <div class="card step">
+        <h3>자동 전송 기준</h3>
+        <div class="hint">전송 방식이 '자동'일 때 아래 조건을 모두 만족한 초안만 확인 없이 보냅니다. 위험·확신은 초안을 쓴 모델이 매긴 값입니다. 업무지시·결정, 장애·긴급, 민감은 설정과 상관없이 항상 직접 확인합니다.</div>
+        <div class="srow"><div><b>자동 전송할 카테고리</b><small>여기서 고른 종류의 대화만 자동으로 보냅니다</small></div></div>
+        <div id="autoCategories"></div>
+        <div class="srow"><div><b>위험 상한</b><small>위험(0~100)이 이 값 미만일 때만 자동 전송합니다. 낮을수록 보수적입니다</small></div><span class="numbox">&lt;<input type="number" id="autoMaxRisk" min="0" max="100" /></span></div>
+        <div class="srow"><div><b>확신 하한</b><small>초안이 내 말투·의도에 맞을 확신이 이 값 이상일 때만 자동 전송합니다. 높을수록 보수적입니다</small></div><span class="numbox">≥<input type="number" id="autoMinConfidence" min="0" max="100" />%</span></div>
+        <div class="srow"><div><b>직접 확인 기준</b><small>위험이 이 값 이상이면 자동/초안 모드와 상관없이 '직접 확인'으로 올립니다</small></div><span class="numbox">≥<input type="number" id="escalateRisk" min="1" max="100" /></span></div>
+      </div>
+
+      <div class="card step">
         <h3>Slack 연결 · 말투 학습 · 그룹 멘션</h3>
         <div class="hint">토큰 교체, 말투 다시 학습, 반응할 그룹 멘션을 바꿉니다.</div>
         <div class="row" style="margin-top:10px"><button id="openSetup" class="btn primary">연결 설정 열기</button><button class="btn" data-guide="make">📖 Slack 연결 가이드</button></div>
@@ -582,7 +592,7 @@
         el('span', { className: `chip ${d.status === 'escalated' ? 'danger' : 'status'}`, textContent: STATUS[d.status] }),
         d.status === 'scheduled' && state.timers?.send[d.id] ? timerChip(state.timers.send[d.id], '자동 전송까지', '전송 중…') : '',
         el('span', { className: 'chip', textContent: d.category }),
-        el('span', { className: `chip ${d.risk >= 60 ? 'danger' : ''}`, textContent: `위험 ${d.risk}` }),
+        el('span', { className: `chip ${d.risk >= Number(state.settings.escalateRisk) ? 'danger' : ''}`, textContent: `위험 ${d.risk}` }),
         el('span', { className: 'chip', textContent: `확신 ${d.confidence}` }),
         el('span', { textContent: d.reason })));
       // 자동 모드인데 왜 대기 중인지
@@ -767,6 +777,10 @@
       options($('summaryEffort'), state.efforts, null, state.settings.summaryEffort);
       renderDetailLlm();
       for (const id of TIMING) if (document.activeElement !== $(id)) $(id).value = state.settings[id];
+      const autoCats = state.settings.autoCategories === 'none' ? [] : state.settings.autoCategories.split(',');
+      $('autoCategories').replaceChildren(...state.autoEligible.map((c) => el('label', { className: 'opt' },
+        el('input', { type: 'checkbox', checked: autoCats.includes(c), value: c, onchange: saveAutoCategories }),
+        el('div', {}, el('b', { textContent: c })))));
       $('inboxCount').textContent = state.openDrafts.length;
       $('inboxSec').classList.toggle('collapsed', inboxCollapsed);
       $('watchCount').textContent = state.watches.length;
@@ -812,7 +826,12 @@
     $('openSetup').onclick = showSetup;
     $('openSettings').onclick = () => ($('settings').hidden = false);
     // 타이밍 설정: 값을 바꾸면 바로 저장. 범위를 벗어나면 토스트로 알리고 원래 값으로
-    const TIMING = ['urgentDelaySec', 'batchDelaySec', 'autoSendMinSec', 'autoSendMaxSec'];
+    const TIMING = ['urgentDelaySec', 'batchDelaySec', 'autoSendMinSec', 'autoSendMaxSec', 'autoMaxRisk', 'autoMinConfidence', 'escalateRisk'];
+    async function saveAutoCategories() {
+      const picked = [...$('autoCategories').querySelectorAll('input:checked')].map((i) => i.value);
+      try { await api.setSetting('autoCategories', picked.join(',') || 'none'); toast('저장했습니다. 다음 판단부터 적용됩니다'); }
+      catch (err) { toast(errText(err), 'err'); }
+    }
     for (const id of TIMING) {
       $(id).onchange = async () => {
         try { await api.setSetting(id, $(id).value.trim()); toast('저장했습니다. 다음 메시지부터 적용됩니다'); }
