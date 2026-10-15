@@ -166,7 +166,8 @@
 
     .timeline { padding: 16px; flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 10px; }
     .msg { max-width: 78%; align-self: flex-start; }
-    .msg .who { font-size: 11px; color: var(--faint); margin: 0 4px 2px; }
+    .msg .who { font-size: 12px; color: var(--sub); margin: 0 4px 3px; }
+    .msg .who b { color: var(--text); font-weight: 700; margin-right: 4px; }
     .msg .text { background: var(--panel-2); border-radius: 4px 14px 14px 14px; padding: 8px 12px; white-space: pre-wrap; word-break: break-word; }
     .msg.mine { align-self: flex-end; }
     .msg.mine .who { text-align: right; }
@@ -711,7 +712,7 @@
       const sentTs = new Set(conv.drafts.map((d) => d.sent_ts).filter(Boolean));
       const items = [
         ...conv.messages.map((m) => ({ t: Number(m.ts) * 1000, node: el('div', { className: `msg ${m.user === conv.me ? 'mine' : ''}` },
-          el('div', { className: 'who', textContent: `${m.user === conv.me ? '나' : m.name}${sentTs.has(m.ts) ? ' · Slmmury가 보냄' : ''} · ${time(m.ts)}` }),
+          el('div', { className: 'who' }, el('b', { textContent: m.user === conv.me ? '나' : m.name }), `${sentTs.has(m.ts) ? 'Slmmury가 보냄 · ' : ''}${time(m.ts)}`),
           el('div', { className: 'text' }, ...m.parts.map(partNode))) })),
         ...conv.drafts.map((d) => ({ t: d.created_at, node: OPEN.includes(d.status) ? draftCard(d)
           : el('div', { className: 'event', textContent: `🤖 ${STATUS[d.status]} · ${d.category} · 위험 ${d.risk} — ${d.reason}${d.draft_text ? `\n초안: ${d.final_text ?? d.draft_text}` : ''}` }) })),
@@ -738,10 +739,10 @@
       if (sameConv && prevSide) side.scrollTop = prevSide.scrollTop;
     }
 
-    // 직접 답장: Enter는 줄바꿈, ⌘/Ctrl+Enter로 보내기
+    // 직접 답장: Enter로 보내기, Shift+Enter는 줄바꿈
     const typing = {};
     function composer(key) {
-      const ta = el('textarea', { rows: 1, value: typing[key] ?? '', placeholder: '직접 답장 쓰기 (⌘/Ctrl+Enter로 보내기)' });
+      const ta = el('textarea', { rows: 1, value: typing[key] ?? '', placeholder: '직접 답장 쓰기 (Enter 보내기 · Shift+Enter 줄바꿈)' });
       const grow = () => { ta.style.height = 'auto'; ta.style.height = `${ta.scrollHeight + 2}px`; };
       const send = el('button', { className: 'btn primary', textContent: '보내기' });
       send.onclick = () => {
@@ -757,7 +758,8 @@
         });
       };
       ta.oninput = () => { typing[key] = ta.value; grow(); };
-      ta.onkeydown = (e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && !e.isComposing) { e.preventDefault(); send.click(); } };
+      // 한글 조합 중 Enter는 글자 확정이라 보내지 않는다
+      ta.onkeydown = (e) => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && e.keyCode !== 229) { e.preventDefault(); send.click(); } };
       requestAnimationFrame(grow);
       return el('div', { className: 'composer' }, ta, send);
     }
