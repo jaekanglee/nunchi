@@ -44,6 +44,11 @@ export function replyState(w: Pick<Watch, 'mode' | 'last_ts' | 'last_name'>, dra
   return w.mode === 'off' ? 'off' : 'unknown';
 }
 
+// 앱 아이콘 뱃지 숫자: 내가 직접 봐야 하는 대화 수 (직접 확인 + 승인 대기)
+export function badgeCount(watches: { reply_state: ReplyState }[]): number {
+  return watches.filter((w) => w.reply_state === 'urgent' || w.reply_state === 'need').length;
+}
+
 export type DraftStatus = 'pending' | 'escalated' | 'scheduled' | 'sent' | 'ignored' | 'skipped' | 'superseded' | 'stale';
 export type Draft = {
   id: number;

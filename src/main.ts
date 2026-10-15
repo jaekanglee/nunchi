@@ -1,10 +1,10 @@
 import 'dotenv/config';
 import path from 'node:path';
-import { app, BrowserWindow, clipboard, ipcMain, Menu, Notification, screen, shell } from 'electron';
+import { app, BrowserWindow, clipboard, ipcMain, Menu, nativeImage, Notification, screen, shell } from 'electron';
 import { startGateway } from './slack/gateway.js';
 import { createConversationReader } from './slack/conversation.js';
 import { hasPersona, loadPersona } from './responder/draft.js';
-import { openStore, type WatchMode } from './store/db.js';
+import { badgeCount, openStore, type WatchMode } from './store/db.js';
 import { createEngine } from './engine.js';
 import { EFFORTS, MODELS } from './llm/claude.js';
 import { SETTINGS, parseGroups, validateSetting } from './ctl/settings.js';
@@ -188,7 +188,28 @@ async function boot() {
   });
   win.webContents.on('will-navigate', (e) => e.preventDefault());
   await win.loadFile(path.join(__dirname, '..', 'static', 'index.html'));
-  const onChange = () => win.webContents.send('state:changed');
+  // 앱 아이콘 뱃지: macOS 독·Linux는 숫자, Windows는 작업 표시줄 아이콘에 빨간 점
+  const redDot = (() => {
+    const n = 16;
+    const buf = Buffer.alloc(n * n * 4);
+    for (let y = 0; y < n; y++)
+      for (let x = 0; x < n; x++)
+        if ((x - 7.5) ** 2 + (y - 7.5) ** 2 <= 7.5 ** 2) buf.set([0x4d, 0x48, 0xe5, 0xff], (y * n + x) * 4); // BGRA
+    return nativeImage.createFromBitmap(buf, { width: n, height: n });
+  })();
+  let lastBadge = -1;
+  const updateBadge = () => {
+    const count = badgeCount(store.listWatches());
+    if (count === lastBadge) return;
+    lastBadge = count;
+    if (process.platform === 'win32') win.setOverlayIcon(count ? redDot : null, count ? `처리 필요 ${count}건` : '');
+    else app.setBadgeCount(count);
+  };
+  const onChange = () => {
+    win.webContents.send('state:changed');
+    updateBadge();
+  };
+  updateBadge();
 
   // 토큰과 말투 데이터가 준비돼야 Slack에 연결한다. 없으면 화면이 설정 단계를 보여준다
   async function start() {

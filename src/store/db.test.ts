@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { openStore, replyState, summaryState } from './db.js';
+import { badgeCount, openStore, replyState, summaryState } from './db.js';
 
 test('감시 등록 후 isWatched, OFF로 바꾸면 해제', () => {
   const s = openStore(':memory:');
@@ -118,4 +118,9 @@ test('목록에 답 필요 상태 포함', () => {
   assert.equal(s.listWatches()[0].reply_state, 'unknown');
   s.insertDraft({ key: 'C1:1.0', channel: 'C1', root_ts: '1.0', basis_ts: '10.0', category: '정보질문', risk: 10, confidence: 0.9, reason: '', draft_text: '네', status: 'pending', hold_reason: null });
   assert.equal(s.listWatches()[0].reply_state, 'need');
+});
+
+test('badgeCount: 직접 확인·승인 대기 대화만 센다', () => {
+  const states = ['urgent', 'need', 'need', 'auto', 'replied', 'none', 'unknown', 'off'] as const;
+  assert.equal(badgeCount(states.map((reply_state) => ({ reply_state }))), 3);
 });
