@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { openStore, summaryState } from './db.js';
+import { openStore, replyState, summaryState } from './db.js';
 
 test('감시 등록 후 isWatched, OFF로 바꾸면 해제', () => {
   const s = openStore(':memory:');
@@ -97,4 +97,25 @@ test('목록 정보: 주제는 요약이 덮어쓰고, 시작 시각은 더 이�
   s.setParticipants('C1:1.0', '7.0', ['지수', '서연', '나']);
   assert.equal(s.getWatch('C1:1.0')?.first_ts, '5.0');
   assert.deepEqual(JSON.parse(s.getWatch('C1:1.0')!.participants!), ['지수', '서연', '나']);
+});
+
+test('replyState: 열린 초안 > 내가 답함 > 최신까지 판단해 답 불필요 > 판단 전', () => {
+  const w = { mode: 'on' as const, last_ts: '10.0', last_name: '지수' };
+  assert.equal(replyState(w, { status: 'escalated', basis_ts: '10.0' }), 'urgent');
+  assert.equal(replyState(w, { status: 'pending', basis_ts: '9.0' }), 'need');
+  assert.equal(replyState(w, { status: 'scheduled', basis_ts: '10.0' }), 'auto');
+  assert.equal(replyState({ ...w, last_name: '나' }, { status: 'skipped', basis_ts: '9.0' }), 'replied');
+  assert.equal(replyState(w, { status: 'skipped', basis_ts: '10.0' }), 'none');
+  assert.equal(replyState(w, { status: 'skipped', basis_ts: '9.0' }), 'unknown'); // 판단 뒤 새 메시지
+  assert.equal(replyState(w, null), 'unknown');
+  assert.equal(replyState({ ...w, mode: 'off' }, null), 'off');
+});
+
+test('목록에 답 필요 상태 포함', () => {
+  const s = openStore(':memory:');
+  s.addWatch('C1:1.0', 'C1', '1.0', 'link');
+  s.setLastMessage('C1:1.0', '10.0', '지수', '이거 봐줄래요?');
+  assert.equal(s.listWatches()[0].reply_state, 'unknown');
+  s.insertDraft({ key: 'C1:1.0', channel: 'C1', root_ts: '1.0', basis_ts: '10.0', category: '정보질문', risk: 10, confidence: 0.9, reason: '', draft_text: '네', status: 'pending', hold_reason: null });
+  assert.equal(s.listWatches()[0].reply_state, 'need');
 });

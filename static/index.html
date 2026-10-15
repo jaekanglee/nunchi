@@ -81,6 +81,13 @@
     .sum.none { background: var(--panel-2); color: var(--faint); }
     .sum.fresh { background: var(--green-soft); color: var(--green); }
     .sum.outdated { background: var(--amber-soft); color: var(--amber); }
+    .reply { font-size: 11px; font-weight: 700; border-radius: 6px; padding: 1px 7px; white-space: nowrap; flex: none; }
+    .reply.urgent { background: var(--red); color: #fff; }
+    .reply.need { background: var(--red-soft); color: var(--red); }
+    .reply.auto { background: var(--brand-soft); color: var(--brand); }
+    .reply.replied { background: var(--green-soft); color: var(--green); }
+    .reply.none, .reply.off { background: var(--panel-2); color: var(--faint); }
+    .reply.unknown { border: 1px dashed var(--line); color: var(--sub); }
     .avatar { width: 34px; height: 34px; border-radius: 10px; flex: none; display: grid; place-items: center; font-weight: 700; color: #fff; font-size: 14px; }
 
     /* 본문은 창 높이에 고정하고, 스크롤은 겹치지 않는 영역(처리 필요 / 타임라인 / 요약)마다 따로 둔다 */
@@ -509,6 +516,15 @@
     const OPEN = ['pending', 'escalated', 'scheduled'];
     const MODE = { on: 'ON', draft: '초안만', off: 'OFF' };
     const SUMMARY = { none: '요약 전', fresh: '요약됨', outdated: '새 메시지' };
+    const REPLY = {
+      urgent: ['⚠️ 직접 확인', '위급·민감하거나 내가 아는 사실이 필요해 직접 답해야 합니다'],
+      need: ['내 답 필요', '초안이 승인을 기다립니다'],
+      auto: ['자동 전송 예정', '초안을 곧 자동으로 보냅니다'],
+      replied: ['내가 답함', '마지막 메시지가 내 답입니다'],
+      none: ['답 불필요', '마지막 메시지까지 보고 내 차례가 아니라고 판단했습니다 (또는 내가 무시함)'],
+      unknown: ['판단 전', '마지막 메시지에 대해 아직 판단하지 않았습니다'],
+      off: ['감시 꺼짐', '이 대화는 판단하지 않습니다'],
+    };
     const MODEL_LABEL = { 'claude-sonnet-5-5': 'Sonnet 5.5', 'claude-opus-5-5': 'Opus 5.5', 'claude-haiku-5-5': 'Haiku 5.5' };
     const options = (sel, values, labels, current) => sel.replaceChildren(...values.map((v) => el('option', { value: v, textContent: labels?.[v] ?? v, selected: v === current })));
     const time = (ts) => new Date(Number(ts) * 1000).toLocaleString();
@@ -655,6 +671,7 @@
       const meta = [w.channel_name, w.first_ts ? `${fullTime(w.first_ts)} 시작` : ''].filter(Boolean).join(' · ');
       const body = el('div', { className: 'body' },
         el('div', { className: 'top' },
+          el('span', { className: `reply ${w.reply_state}`, textContent: REPLY[w.reply_state][0], title: REPLY[w.reply_state][1] }),
           el('div', { className: 'name', textContent: w.topic ?? w.title ?? w.key, title: w.title ?? '' }),
           el('span', { className: 'hint', style: 'flex:none', textContent: w.last_ts ? shortTime(w.last_ts) : '' })),
         meta ? el('div', { className: 'meta-line', textContent: meta }) : '',

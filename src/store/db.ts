@@ -31,6 +31,19 @@ export function summaryState(lastTs: string | null, summaryTs: string | null): S
   if (lastTs && Number(lastTs) > Number(summaryTs)) return 'outdated';
   return 'fresh';
 }
+// 목록 뱃지: 이 대화에 내 답이 필요한지
+export type ReplyState = 'urgent' | 'need' | 'auto' | 'replied' | 'none' | 'unknown' | 'off';
+export function replyState(w: Pick<Watch, 'mode' | 'last_ts' | 'last_name'>, draft: { status: string; basis_ts: string } | null): ReplyState {
+  if (draft?.status === 'escalated') return 'urgent';
+  if (draft?.status === 'pending') return 'need';
+  if (draft?.status === 'scheduled') return 'auto';
+  if (w.last_name === '나' || draft?.status === 'sent') return 'replied';
+  // 마지막 메시지까지 보고 "내 차례 아님"이라 했거나 내가 무시했으면 답 불필요
+  const judgedLatest = draft && (!w.last_ts || Number(draft.basis_ts) >= Number(w.last_ts));
+  if (judgedLatest && (draft.status === 'skipped' || draft.status === 'ignored')) return 'none';
+  return w.mode === 'off' ? 'off' : 'unknown';
+}
+
 export type DraftStatus = 'pending' | 'escalated' | 'scheduled' | 'sent' | 'ignored' | 'skipped' | 'superseded' | 'stale';
 export type Draft = {
   id: number;
@@ -140,14 +153,20 @@ export function openStore(file: string) {
     setWatchMode(key: string, mode: WatchMode) {
       db.prepare('UPDATE watches SET mode = ? WHERE key = ?').run(mode, key);
     },
-    listWatches(): (Watch & { summary_state: SummaryState })[] {
+    listWatches(): (Watch & { summary_state: SummaryState; reply_state: ReplyState })[] {
       const rows = db
         .prepare(
-          `SELECT w.*, (SELECT basis_ts FROM summaries s WHERE s.key = w.key ORDER BY id DESC LIMIT 1) AS summary_ts
+          `SELECT w.*, (SELECT basis_ts FROM summaries s WHERE s.key = w.key ORDER BY id DESC LIMIT 1) AS summary_ts,
+             (SELECT status FROM drafts d WHERE d.key = w.key ORDER BY id DESC LIMIT 1) AS draft_status,
+             (SELECT basis_ts FROM drafts d WHERE d.key = w.key ORDER BY id DESC LIMIT 1) AS draft_basis_ts
            FROM watches w WHERE last_activity_at > ? ORDER BY last_activity_at DESC`,
         )
-        .all(Date.now() - WATCH_TTL_MS) as (Watch & { summary_ts: string | null })[];
-      return rows.map((w) => ({ ...w, summary_state: summaryState(w.last_ts, w.summary_ts) }));
+        .all(Date.now() - WATCH_TTL_MS) as (Watch & { summary_ts: string | null; draft_status: string | null; draft_basis_ts: string | null })[];
+      return rows.map(({ draft_status, draft_basis_ts, ...w }) => ({
+        ...w,
+        summary_state: summaryState(w.last_ts, w.summary_ts),
+        reply_state: replyState(w, draft_status ? { status: draft_status, basis_ts: draft_basis_ts! } : null),
+      }));
     },
 
     insertSummary(key: string, basisTs: string, body: object) {
