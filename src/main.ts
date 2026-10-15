@@ -161,6 +161,12 @@ async function boot() {
       contextIsolation: true,
     },
   });
+  // 광고 iframe 등에서 새 창을 열려고 하면 앱 창 대신 기본 브라우저로. 앱 화면 자체는 다른 주소로 이동하지 않는다
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:/i.test(url)) void shell.openExternal(url);
+    return { action: 'deny' };
+  });
+  win.webContents.on('will-navigate', (e) => e.preventDefault());
   await win.loadFile(path.join(__dirname, '..', 'static', 'index.html'));
   const onChange = () => win.webContents.send('state:changed');
 
