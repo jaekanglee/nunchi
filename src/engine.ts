@@ -340,6 +340,17 @@ export function createEngine(deps: EngineDeps) {
     read,
     remember,
     send: post,
+    // 초안 없이 내가 직접 쓴 답장. 보내면 열린 초안은 무효
+    async reply(key: string, text: string) {
+      const w = store.getWatch(key);
+      if (!w) throw new Error('감시 중인 대화가 아닙니다');
+      if (!text.trim()) throw new Error('보낼 내용이 없습니다');
+      const res = await client.chat.postMessage({ channel: w.channel, text, thread_ts: w.root_ts ?? undefined });
+      store.supersedeOpen(key);
+      store.touchWatch(key);
+      if (res.ts) store.setLastMessage(key, res.ts, '나', text);
+      deps.onChange();
+    },
     ignore(id: number) {
       store.setDraftStatus(id, 'ignored');
       deps.onChange();

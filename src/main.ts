@@ -95,6 +95,7 @@ async function boot() {
   ipcMain.handle('summary:runStale', () => ready().summarizeStale());
   ipcMain.handle('link:add', (_ev, url: string) => ready().addLink(url));
   ipcMain.handle('draft:send', (_ev, id: number, text: string) => ready().send(id, text));
+  ipcMain.handle('message:reply', (_ev, key: string, text: string) => ready().reply(key, text));
   ipcMain.handle('draft:ignore', (_ev, id: number) => ready().ignore(id));
 
   // 첫 실행 설정

@@ -11,6 +11,7 @@ contextBridge.exposeInMainWorld('slmmury', {
   summarizeStale: () => ipcRenderer.invoke('summary:runStale'),
   addLink: (url: string) => ipcRenderer.invoke('link:add', url),
   sendDraft: (id: number, text: string) => ipcRenderer.invoke('draft:send', id, text),
+  reply: (key: string, text: string) => ipcRenderer.invoke('message:reply', key, text),
   ignoreDraft: (id: number) => ipcRenderer.invoke('draft:ignore', id),
   onChange: (cb: () => void) => ipcRenderer.on('state:changed', () => cb()),
   watchMenu: (key: string) => ipcRenderer.invoke('watch:contextMenu', key),
