@@ -1,6 +1,6 @@
 import 'dotenv/config';
 import path from 'node:path';
-import { app, BrowserWindow, clipboard, ipcMain, Menu, Notification, shell } from 'electron';
+import { app, BrowserWindow, clipboard, ipcMain, Menu, Notification, screen, shell } from 'electron';
 import { startGateway } from './slack/gateway.js';
 import { createConversationReader } from './slack/conversation.js';
 import { hasPersona, loadPersona } from './responder/draft.js';
@@ -14,6 +14,7 @@ import { checkClaude, loadTokens, saveTokens, verifyTokens, type Tokens } from '
 import { collectPersona } from './persona/collect.js';
 import { analyzePersona } from './persona/analyze.js';
 import { toParts } from './slack/mrkdwn.js';
+import { WINDOW_MIN, parseWindowState, restoreBounds } from './windowState.js';
 import { buildDeepLink, buildPermalink } from './slack/permalink.js';
 import { SCOPES, buildManifest, createAppUrl, toYaml, type ManifestOptions } from './slack/manifest.js';
 
@@ -148,11 +149,12 @@ async function boot() {
   const icon = path.join(__dirname, '..', 'assets', 'icon.png');
   app.dock?.setIcon(icon);
   const isMac = process.platform === 'darwin';
+  // 지난번 창 크기·위치로 연다
+  const savedWindow = parseWindowState(store.getSetting('windowState', ''));
   const win = new BrowserWindow({
-    width: 1200,
-    height: 820,
-    minWidth: 900,
-    minHeight: 600,
+    ...restoreBounds(savedWindow, screen.getAllDisplays().map((d) => d.workArea)),
+    minWidth: WINDOW_MIN.width,
+    minHeight: WINDOW_MIN.height,
     icon,
     // macOS는 제목줄을 숨기고 신호등 버튼을 상단 바 위에 얹는다. Windows·Linux는 OS 기본 제목줄
     ...(isMac ? { titleBarStyle: 'hiddenInset' as const, trafficLightPosition: { x: 16, y: 18 } } : { autoHideMenuBar: true }),
@@ -163,6 +165,23 @@ async function boot() {
     },
   });
   // 광고 iframe 등에서 새 창을 열려고 하면 앱 창 대신 기본 브라우저로. 앱 화면 자체는 다른 주소로 이동하지 않는다
+  if (savedWindow?.maximized) win.maximize();
+  // 최대화 중에도 되돌릴 크기(normal bounds)를 저장한다
+  let saveTimer: NodeJS.Timeout | undefined;
+  const saveWindow = () => {
+    clearTimeout(saveTimer);
+    if (win.isDestroyed() || win.isMinimized() || win.isFullScreen()) return;
+    store.setSetting('windowState', JSON.stringify({ ...win.getNormalBounds(), maximized: win.isMaximized() }));
+  };
+  const saveLater = () => {
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(saveWindow, 500);
+  };
+  win.on('resize', saveLater);
+  win.on('move', saveLater);
+  win.on('maximize', saveLater);
+  win.on('unmaximize', saveLater);
+  win.on('close', saveWindow);
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (/^https?:/i.test(url)) void shell.openExternal(url);
     return { action: 'deny' };
