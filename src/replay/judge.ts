@@ -1,6 +1,6 @@
 // judge(Haiku) 재생 검증. 앱 DB는 읽기 전용으로 열고, Slack은 읽기만 한다 (전송·DB 쓰기 없음)
 // 사용:
-//   npm run replay:judge -- --arms new@low,new@medium,base@low#1,base@low#2 --gate new@low --my-scope "배송앱·관리자 웹" --out data/replay-A.json
+//   npm run replay:judge -- --arms new@low,new@medium,base@low#1,base@low#2 --gate new@low --out data/replay-A.json  (--my-scope를 빼면 말투 분석의 담당 업무를 쓴다)
 //   npm run replay:judge -- --from data/replay-A.json --gate new@medium   (LLM·Slack 호출 없이 다시 판정)
 // 종료 코드: 2 재조회 실패가 라벨 true 행의 20% 초과, 1 gate arm이 놓친 행 있음, 0 통과
 import 'dotenv/config';
@@ -104,7 +104,8 @@ async function main(): Promise<number> {
   for (const arm of arms) if (!(EFFORTS as readonly string[]).includes(arm.effort)) throw new Error(`effort는 ${EFFORTS.join(', ')} 중 하나: ${arm.name}`);
   const out = a.get('out');
   if (!out) throw new Error('--out <json 경로>가 필요합니다');
-  const myScope = a.get('my-scope') ?? 'none';
+  const persona = loadPersona();
+  const myScope = a.get('my-scope') ?? persona.myScope ?? 'none';
 
   const db = new DatabaseSync(a.get('db') ?? DB_PATH, { readOnly: true });
   const setting = (key: string, fallback: string) =>
@@ -120,7 +121,7 @@ async function main(): Promise<number> {
   const myUserId = (await client.auth.test()).user_id as string;
   const groups = parseGroups(setting('mentionGroups', 'none'));
   const { read } = createConversationReader(client, myUserId, () => groups);
-  const ctx = { read, myUserId, judgeModel: setting('judgeModel', 'claude-haiku-5-5'), myScope, persona: loadPersona() };
+  const ctx = { read, myUserId, judgeModel: setting('judgeModel', 'claude-haiku-5-5'), myScope, persona };
   console.log(`judge 모델 ${ctx.judgeModel} · arms ${arms.map((x) => x.name).join(', ')} · myScope ${myScope}`);
 
   const rows: ResultRow[] = new Array(set.length);

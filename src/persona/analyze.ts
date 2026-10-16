@@ -1,11 +1,12 @@
 // 수집한 내 메시지로 말투 가이드와 상대별 관계 정보를 만든다.
 // 앱 첫 설정 화면에서 collect 다음에 실행된다. 직접 돌릴 때: npm run persona:analyze
-// 결과: PERSONA_DIR/style_guide.md, PERSONA_DIR/relationships.json
+// 결과: PERSONA_DIR/style_guide.md, PERSONA_DIR/relationships.json, PERSONA_DIR/my_scope.txt
 import fs from 'node:fs';
 import path from 'node:path';
 import { runClaude } from '../llm/claude.js';
 import { PERSONA_DIR as DIR } from '../paths.js';
 import type { Pair } from './pairs.js';
+import { MY_SCOPE_FILE } from '../responder/draft.js';
 
 const readJsonl = <T>(file: string): T[] =>
   fs.readFileSync(path.join(DIR, file), 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l) as T);
@@ -13,9 +14,10 @@ const readJsonl = <T>(file: string): T[] =>
 const SCHEMA = {
   type: 'object',
   additionalProperties: false,
-  required: ['style_guide', 'relationships'],
+  required: ['style_guide', 'relationships', 'my_scope'],
   properties: {
     style_guide: { type: 'string' },
+    my_scope: { type: 'string' },
     relationships: {
       type: 'array',
       items: {
@@ -47,6 +49,8 @@ const INSTRUCTIONS = `아래는 한 사람이 회사 Slack 공개 채널에 쓴 
 
 2. relationships: 대화 쌍에 등장한 상대마다 이 사람이 쓰는 말투(register), 분위기(tone), 참고할 점(notes)을 정리한다. 근거가 2개 미만인 상대는 제외한다.
 
+3. my_scope: 이 사람이 담당하는 업무·제품을 한 줄 명사구로 쓴다 (예: "배송앱·관리자 웹"). 다른 모델이 "이 대화가 이 사람 담당인지" 가를 때 쓴다. 데이터에서 드러난 것만 쓰고, 알 수 없으면 빈 문자열.
+
 공개 채널 데이터라서 DM보다 격식체로 치우쳤을 수 있다. 이 점은 style_guide 끝에 짧게 적어둔다.`;
 
 export async function analyzePersona(log: (line: string) => void = console.log) {
@@ -60,7 +64,7 @@ export async function analyzePersona(log: (line: string) => void = console.log) 
     ...mine.map((m) => `- ${m.text}`),
   ].join('\n');
 
-  const { output: result, costUsd } = await runClaude<{ style_guide: string; relationships: unknown[] }>({
+  const { output: result, costUsd } = await runClaude<{ style_guide: string; relationships: unknown[]; my_scope: string }>({
     system: INSTRUCTIONS,
     prompt: body,
     schema: SCHEMA,
@@ -69,6 +73,7 @@ export async function analyzePersona(log: (line: string) => void = console.log) 
 
   fs.writeFileSync(path.join(DIR, 'style_guide.md'), result.style_guide);
   fs.writeFileSync(path.join(DIR, 'relationships.json'), JSON.stringify(result.relationships, null, 2));
+  fs.writeFileSync(path.join(DIR, MY_SCOPE_FILE), result.my_scope.trim());
   log(`완료: 말투 가이드, 상대 ${result.relationships.length}명 · $${costUsd.toFixed(3)}`);
 }
 

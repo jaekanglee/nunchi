@@ -5,7 +5,7 @@ import type { Pair } from '../persona/pairs.js';
 // edited: Slack edited.ts (수정된 메시지만). 증분 요약이 요약 뒤 수정됐는지 볼 때만 쓰고 프롬프트에는 넣지 않는다
 export type ThreadMessage = { ts: string; user: string; name: string; text: string; mentions?: string[]; edited?: string };
 export type Relationship = { user_id: string; name: string; register: string; tone: string; notes: string };
-export type Persona = { styleGuide: string; relationships: Relationship[]; pairs: Pair[] };
+export type Persona = { styleGuide: string; relationships: Relationship[]; pairs: Pair[]; myScope?: string };
 
 // 대화 상대와 나눈 실제 대화 쌍을 먼저, 나머지는 최근 것으로 채운다 (pairs는 최신순)
 export function pickExamples(pairs: Pair[], partnerIds: string[], n: number): Pair[] {

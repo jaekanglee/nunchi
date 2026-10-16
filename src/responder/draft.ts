@@ -48,9 +48,15 @@ export function hasPersona(dir = PERSONA_DIR): boolean {
   return ['style_guide.md', 'relationships.json', 'pairs.jsonl'].every((f) => fs.existsSync(path.join(dir, f)));
 }
 
+// 말투 분석이 뽑은 내 담당 업무 한 줄. 예전에 분석한 persona에는 없을 수 있다
+export const MY_SCOPE_FILE = 'my_scope.txt';
+
 export function loadPersona(dir = PERSONA_DIR): Persona {
   const read = (f: string) => fs.readFileSync(path.join(dir, f), 'utf8');
+  const scopeFile = path.join(dir, MY_SCOPE_FILE);
+  const myScope = fs.existsSync(scopeFile) ? fs.readFileSync(scopeFile, 'utf8').trim() : '';
   return {
+    ...(myScope ? { myScope } : {}),
     styleGuide: read('style_guide.md'),
     relationships: JSON.parse(read('relationships.json')),
     pairs: read('pairs.jsonl').split('\n').filter(Boolean).map((l) => JSON.parse(l) as Pair),

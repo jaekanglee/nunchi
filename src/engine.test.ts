@@ -117,3 +117,26 @@ test('요약: 기준 이전 메시지가 요약 뒤 수정되면 전체로 다�
   assert.equal(calls[1].prevBody, undefined);
   assert.equal(calls[1].thread.length, 3);
 });
+
+test('담당 업무: 설정이 none이면 말투 분석 값, 설정하면 그 값을 judge에 넘긴다', async () => {
+  const seen: (string | undefined)[] = [];
+  const store = openStore(':memory:');
+  const client = { search: { messages: async () => ({ messages: { matches: [] } }) } } as unknown as WebClient;
+  const engine = createEngine({
+    client,
+    myUserId: 'UME',
+    store,
+    readConversation: { read: async () => [{ ts: '1700000000.000100', user: 'UA', name: '서연', text: '질문' }], nameOf: async (u: string) => u },
+    persona: { styleGuide: 'S', relationships: [], pairs: [], myScope: '배송앱' },
+    notify: () => {},
+    onChange: () => {},
+    judge: async (_t, _p, _me, _llm, opts): Promise<ClaudeResult<Judgment>> => {
+      seen.push(opts?.myScope);
+      return { output: { needs_my_reply: false, reason: 'r', topic: 't' }, costUsd: 0, usage };
+    },
+  });
+  await engine.addLink(LINK);
+  store.setSetting('myScope', '정산');
+  await engine.addLink(LINK);
+  assert.deepEqual(seen, ['배송앱', '정산']);
+});

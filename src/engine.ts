@@ -125,6 +125,8 @@ export function createEngine(deps: EngineDeps) {
   // 타이밍 설정(초)을 ms로. 설정 화면·ctl에서 바꾸면 다음 메시지부터 바로 반영된다
   const setting = (key: string) => store.getSetting(key, SETTINGS[key].fallback);
   const ms = (key: string) => Number(setting(key)) * 1000;
+  // 설정으로 덮어쓰지 않았으면 말투 분석이 뽑은 담당 업무를 쓴다
+  const myScope = () => (setting('myScope') !== 'none' ? setting('myScope') : (deps.persona.myScope ?? 'none'));
   // 자동 전송 기준도 판단할 때마다 읽어서 바로 반영
   const thresholds = () => thresholdsFrom(setting);
 
@@ -189,7 +191,7 @@ export function createEngine(deps: EngineDeps) {
       const main = llmFor(key, 'draft');
       let judgeCost: number | null = null;
       if (rootTs !== null && judgeModel !== 'off' && judgeModel !== main.model) {
-        const judged = await judge(thread, deps.persona, myUserId, { model: judgeModel, effort: JUDGE_EFFORT }, { myScope: setting('myScope') });
+        const judged = await judge(thread, deps.persona, myUserId, { model: judgeModel, effort: JUDGE_EFFORT }, { myScope: myScope() });
         if (gone(key)) return;
         const j = judged.output;
         judgeCost = judged.costUsd;
@@ -197,7 +199,7 @@ export function createEngine(deps: EngineDeps) {
         if (!j.needs_my_reply) return skipWithoutDraft(key, channel, rootTs, last.ts, '1차 판단', j.reason, judgeCost);
       }
 
-      const drafted = await draft(thread, deps.persona, myUserId, main, undefined, setting('myScope'));
+      const drafted = await draft(thread, deps.persona, myUserId, main, undefined, myScope());
       const result = drafted.output;
       if (gone(key)) return;
       const sendMode: SendMode = watch.mode === 'draft' ? 'draft' : (store.getSetting('sendMode', 'draft') as SendMode);
@@ -315,7 +317,7 @@ export function createEngine(deps: EngineDeps) {
     remember(key, thread, w.root_ts === null);
     const last = thread.at(-1);
     if (!last) throw new Error('대화에 메시지가 없습니다');
-    const drafted = await draft(thread, deps.persona, myUserId, llmFor(key, 'draft'), hint, setting('myScope'));
+    const drafted = await draft(thread, deps.persona, myUserId, llmFor(key, 'draft'), hint, myScope());
     const result = drafted.output;
     if (!result.reply) throw new Error('초안을 만들지 못했습니다');
     const t = thresholds();

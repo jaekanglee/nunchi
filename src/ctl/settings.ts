@@ -32,7 +32,7 @@ export const SETTINGS: Record<string, SettingDef> = {
   escalateRisk: { range: [1, 100], fallback: String(DEFAULT_THRESHOLDS.escalateRisk), desc: '위험이 이 값 이상이면 모드와 상관없이 직접 확인' },
   adUrl: { pattern: /^(none|https:\/\/\S+)$/, fallback: 'none', desc: '사이드바 하단 광고 배너로 띄울 https 페이지 (없으면 none)' },
   mentionGroups: { pattern: /^(none|S[A-Z0-9]+(,S[A-Z0-9]+)*)$/, fallback: 'none', desc: '반응할 그룹 멘션 (S로 시작하는 ID, 쉼표 구분, 없으면 none)' },
-  myScope: { pattern: /^\S.{0,299}$/, fallback: 'none', desc: '내 담당 업무. 판단·초안 프롬프트에 넣어 내 담당과 무관한 대화를 거른다 (한 줄 300자 이내, 없으면 none)' },
+  myScope: { pattern: /^\S.{0,299}$/, fallback: 'none', desc: '내 담당 업무 덮어쓰기. none이면 말투 분석이 뽑은 값을 쓴다 (판단·초안에서 내 담당과 무관한 대화를 거름, 한 줄 300자 이내)' },
 };
 
 export function parseList(value: string): string[] {
