@@ -4,16 +4,28 @@ import { addressedToOthersOnly, isUrgent, route, threadKey, type MessageEvent } 
 import { parsePermalink } from './slack/permalink.js';
 import { conversationTitle, participantNames, type ConversationReader } from './slack/conversation.js';
 import { generateDraft } from './responder/draft.js';
-import { judgeTurn } from './responder/judge.js';
+import { JUDGE_EFFORT, judgeTurn } from './responder/judge.js';
 import { decide, holdReasons, type SendMode } from './responder/policy.js';
 import type { Persona } from './responder/prompt.js';
-import { summarizeConversation } from './summary/summarize.js';
+import { editMark, planSummary, summarizeConversation } from './summary/summarize.js';
 import type { ThreadMessage } from './responder/prompt.js';
-import type { Store } from './store/db.js';
-import { resolveLlm, type Llm } from './llm/claude.js';
+import type { CostFields, Store } from './store/db.js';
+import { resolveLlm, type Llm, type Usage } from './llm/claude.js';
 import { SETTINGS, parseGroups, thresholdsFrom } from './ctl/settings.js';
 
 const SUMMARY_KEEP = 300; // 요약은 긴 스레드도 최근 300개까지 읽는다
+
+// runClaude 비용·토큰을 drafts·summaries 비용 컬럼 형태로 바꾼다
+function costFields(r: { costUsd: number; usage: Usage }): CostFields {
+  return {
+    cost_usd: r.costUsd,
+    input_tokens: r.usage.input,
+    output_tokens: r.usage.output,
+    cache_read_tokens: r.usage.cacheRead,
+    cache_creation_tokens: r.usage.cacheCreation,
+    thinking_tokens: r.usage.thinking,
+  };
+}
 
 export type EngineDeps = {
   client: WebClient;
@@ -23,6 +35,10 @@ export type EngineDeps = {
   persona: Persona;
   notify: (title: string, body: string) => void;
   onChange: () => void;
+  // 테스트에서 LLM 대신 넣는 대역
+  judge?: typeof judgeTurn;
+  draft?: typeof generateDraft;
+  summarize?: typeof summarizeConversation;
 };
 
 const splitKey = (key: string) => {
@@ -33,6 +49,11 @@ const splitKey = (key: string) => {
 export function createEngine(deps: EngineDeps) {
   const { client, myUserId, store } = deps;
   const read = deps.readConversation.read;
+  const judge = deps.judge ?? judgeTurn;
+  const draft = deps.draft ?? generateDraft;
+  const summarizeLlm = deps.summarize ?? summarizeConversation;
+  // 판단·초안을 기다리는 동안 삭제·보관됐으면 결과를 버린다
+  const gone = (key: string) => store.isBlocked(key) || !store.getWatch(key);
 
   // 전역 기본값(초안·요약별 effort) 위에 대화별 설정을 얹는다
   function llmFor(key: string, kind: 'draft' | 'summary'): Llm {
@@ -131,9 +152,13 @@ export function createEngine(deps: EngineDeps) {
   }
 
   // LLM 없이 "내 차례 아님"을 기록한다
-  function skipWithoutDraft(key: string, channel: string, rootTs: string | null, basisTs: string, category: string, reason: string) {
+  function skipWithoutDraft(key: string, channel: string, rootTs: string | null, basisTs: string, category: string, reason: string, judgeCost: number | null = null) {
+    if (gone(key)) return;
     store.supersedeOpen(key);
-    store.insertDraft({ key, channel, root_ts: rootTs, basis_ts: basisTs, category, risk: 0, confidence: 1, reason, draft_text: '', status: 'skipped', hold_reason: null });
+    store.insertDraft({
+      key, channel, root_ts: rootTs, basis_ts: basisTs, category, risk: 0, confidence: 1, reason, draft_text: '', status: 'skipped', hold_reason: null,
+      judge_cost_usd: judgeCost,
+    });
     deps.onChange();
   }
 
@@ -162,14 +187,19 @@ export function createEngine(deps: EngineDeps) {
       // DM은 제외: 잡담 맞장구도 답할 차례인데 Haiku는 "대화가 끝났다"로 보고 놓쳤다 (재생 검증 DM 9건 누락, 채널 0건)
       const judgeModel = store.getSetting('judgeModel', 'claude-haiku-5-5');
       const main = llmFor(key, 'draft');
+      let judgeCost: number | null = null;
       if (rootTs !== null && judgeModel !== 'off' && judgeModel !== main.model) {
-        const j = await judgeTurn(thread, deps.persona, myUserId, { model: judgeModel, effort: 'low' });
+        const judged = await judge(thread, deps.persona, myUserId, { model: judgeModel, effort: JUDGE_EFFORT }, { myScope: setting('myScope') });
+        if (gone(key)) return;
+        const j = judged.output;
+        judgeCost = judged.costUsd;
         store.setWatchTopic(key, j.topic, true);
-        if (!j.needs_my_reply) return skipWithoutDraft(key, channel, rootTs, last.ts, '1차 판단', j.reason);
+        if (!j.needs_my_reply) return skipWithoutDraft(key, channel, rootTs, last.ts, '1차 판단', j.reason, judgeCost);
       }
 
-      const result = await generateDraft(thread, deps.persona, myUserId, main);
-      if (store.isBlocked(key) || !store.getWatch(key)) return; // 작업 중에 삭제·보관됨
+      const drafted = await draft(thread, deps.persona, myUserId, main, undefined, setting('myScope'));
+      const result = drafted.output;
+      if (gone(key)) return;
       const sendMode: SendMode = watch.mode === 'draft' ? 'draft' : (store.getSetting('sendMode', 'draft') as SendMode);
       const t = thresholds();
       const decision = decide(result, sendMode, t);
@@ -191,6 +221,8 @@ export function createEngine(deps: EngineDeps) {
         draft_text: result.reply,
         status: status[decision],
         hold_reason: decision === 'approve' || decision === 'escalate' ? hold.join(' · ') : null,
+        judge_cost_usd: judgeCost,
+        ...costFields(drafted),
       });
 
       if (decision === 'escalate') deps.notify(`⚠️ 직접 확인 필요 · ${last.name}`, `${last.text}\n— ${result.reason}`);
@@ -253,8 +285,15 @@ export function createEngine(deps: EngineDeps) {
     const last = thread.at(-1);
     if (!last) throw new Error('대화에 메시지가 없습니다');
     remember(key, thread, w.root_ts === null);
-    const summary = await summarizeConversation(thread, myUserId, llmFor(key, 'summary'));
-    store.insertSummary(key, last.ts, summary);
+    const prev = store.latestSummary(key);
+    const plan = planSummary(thread, prev && { body: prev.body, basis_ts: prev.basis_ts, edit_mark: prev.edit_mark });
+    if (plan.kind === 'none') return; // 이전 요약 뒤 새 메시지 없음: LLM을 부르지 않는다
+    const summarized =
+      plan.kind === 'incremental'
+        ? await summarizeLlm(plan.newMessages, myUserId, llmFor(key, 'summary'), plan.prevBody)
+        : await summarizeLlm(thread, myUserId, llmFor(key, 'summary'));
+    const summary = summarized.output;
+    store.insertSummary(key, last.ts, summary, { edit_mark: editMark(thread, last.ts), ...costFields(summarized) });
     store.setWatchTopic(key, summary.topic);
     deps.onChange();
   }
@@ -276,7 +315,8 @@ export function createEngine(deps: EngineDeps) {
     remember(key, thread, w.root_ts === null);
     const last = thread.at(-1);
     if (!last) throw new Error('대화에 메시지가 없습니다');
-    const result = await generateDraft(thread, deps.persona, myUserId, llmFor(key, 'draft'), hint);
+    const drafted = await draft(thread, deps.persona, myUserId, llmFor(key, 'draft'), hint, setting('myScope'));
+    const result = drafted.output;
     if (!result.reply) throw new Error('초안을 만들지 못했습니다');
     const t = thresholds();
     const decision = decide({ ...result, needs_my_reply: true }, 'draft', t);
@@ -286,6 +326,7 @@ export function createEngine(deps: EngineDeps) {
       category: result.category, risk: result.risk, confidence: result.confidence, reason: result.reason,
       draft_text: result.reply, status: decision === 'escalate' ? 'escalated' : 'pending',
       hold_reason: ['직접 요청한 초안', ...holdReasons(result, 'draft', t).filter((r) => r !== '전송 설정이 초안 모드')].join(' · '),
+      ...costFields(drafted),
     });
   }
 

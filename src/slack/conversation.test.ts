@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { conversationTitle, participantNames, readableGroupMentions, trimThread } from './conversation.js';
+import { capMessages, conversationTitle, participantNames, readableGroupMentions, trimThread } from './conversation.js';
 
 test('페이지 합친 결과를 ts순 정렬·중복 제거하고 루트 + 최근 N개만 남긴다', () => {
   const page1 = [{ ts: '1' }, { ts: '2' }, { ts: '9' }];
@@ -36,4 +36,20 @@ test('participantNames: 말한 순서대로, 나는 끝에', () => {
   ];
   assert.deepEqual(participantNames(msgs, 'UME'), ['지수', '서연', '나']);
   assert.deepEqual(participantNames(msgs.filter((m) => m.user !== 'UME'), 'UME'), ['지수', '서연']);
+});
+
+test('capMessages: 상한 넘는 중간 메시지만 자르고, 루트와 마지막 5개는 원문 그대로', () => {
+  const long = 'x'.repeat(20);
+  const msgs = Array.from({ length: 8 }, (_, i) => ({ ts: String(i + 1), text: i === 2 ? 'short' : long }));
+  const capped = capMessages(msgs, { max: 10, keepTail: 5, rootTs: '1' });
+  assert.equal(capped[0].text, long); // 루트
+  assert.equal(capped[1].text, 'x'.repeat(10) + ' …(10자 생략)');
+  assert.equal(capped[2].text, 'short'); // 상한 이하
+  for (const m of capped.slice(3)) assert.equal(m.text, long); // 마지막 5개
+  assert.equal(msgs[1].text, long); // 입력은 바꾸지 않는다
+});
+
+test('capMessages: DM은 루트 없이 마지막 N개만 원문', () => {
+  const msgs = [{ ts: '1', text: 'y'.repeat(12) }, { ts: '2', text: 'y'.repeat(12) }];
+  assert.deepEqual(capMessages(msgs, { max: 10, keepTail: 1 }).map((m) => m.text), ['y'.repeat(10) + ' …(2자 생략)', 'y'.repeat(12)]);
 });

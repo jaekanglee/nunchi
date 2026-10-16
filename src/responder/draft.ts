@@ -1,7 +1,7 @@
 // 대화 하나에 대해 "내 차례인지" 판단 + 답장 초안을 한 번의 claude 호출로 만든다.
 import fs from 'node:fs';
 import path from 'node:path';
-import { runClaude, type Llm } from '../llm/claude.js';
+import { runClaude, type ClaudeResult, type Llm } from '../llm/claude.js';
 import { PERSONA_DIR } from '../paths.js';
 import type { Pair } from '../persona/pairs.js';
 import { CATEGORIES, type Assessment } from './policy.js';
@@ -28,7 +28,7 @@ const SYSTEM = `너는 Slack에서 한 사람("나")을 대신해 답장 초안�
 - reason: 판단 이유를 한두 문장으로.
 - topic: 이 대화의 주제를 15자 안팎 명사구로 (예: "예약건 푸시 필터 버그", "다음 배포 일정"). 대화 목록 제목으로 쓴다.`;
 
-const SCHEMA = {
+export const SCHEMA = {
   type: 'object',
   additionalProperties: false,
   required: ['needs_my_reply', 'category', 'risk', 'needs_facts_i_dont_know', 'confidence', 'reply', 'reason', 'topic'],
@@ -58,14 +58,13 @@ export function loadPersona(dir = PERSONA_DIR): Persona {
 }
 
 // request: 내가 화면에서 직접 요청한 초안이면 해야 할 일. 이때는 차례 판단과 상관없이 답장을 쓴다
-export async function generateDraft(thread: ThreadMessage[], persona: Persona, myUserId: string, llm?: Llm, request?: string): Promise<DraftResult> {
-  const { context, conversation } = buildPrompt(thread, persona, myUserId);
+export async function generateDraft(thread: ThreadMessage[], persona: Persona, myUserId: string, llm?: Llm, request?: string, myScope?: string): Promise<ClaudeResult<DraftResult>> {
+  const { context, conversation } = buildPrompt(thread, persona, myUserId, myScope);
   const asked = request === undefined ? '' : `\n\n# 내가 직접 요청한 초안\n지금 이 대화에 내가 답장을 보내려 한다. needs_my_reply는 true로 두고 reply를 반드시 쓴다.${request ? `\n해야 할 일(요약 기준): ${request}` : ''}`;
-  const { output } = await runClaude<DraftResult>({
+  return runClaude<DraftResult>({
     system: `${SYSTEM}\n\n${context}`,
     prompt: conversation + asked,
     schema: SCHEMA,
     llm,
   });
-  return output;
 }

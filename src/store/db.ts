@@ -23,7 +23,8 @@ export type Watch = {
   participants: string | null; // 참여자 이름 JSON 배열
   archived_at: number | null; // 보관한 시각. 있으면 목록에서 빠지고 감시도 안 한다
 };
-export type Summary = { id: number; key: string; basis_ts: string; body: string; created_at: number };
+// edit_mark: 요약 시점의 max(basis_ts, 읽은 메시지 edited.ts). 이전 버전 행은 null
+export type Summary = { id: number; key: string; basis_ts: string; body: string; created_at: number; edit_mark: string | null } & CostColumns;
 export type SummaryState = 'none' | 'fresh' | 'outdated';
 
 // 요약 시점 이후 새 메시지가 있으면 outdated
@@ -67,7 +68,18 @@ export type Draft = {
   created_at: number;
   sent_ts: string | null;
   hold_reason: string | null; // 자동 전송하지 않은 이유 (' · '로 연결)
-};
+  judge_cost_usd: number | null; // 1차 판단(Haiku) 비용. '규칙' skip·직접 요청 행은 null
+} & CostColumns;
+
+// LLM 호출 비용·토큰. claude -p 출력에 없는 값은 null로 저장한다
+export const COST_COLS = ['cost_usd', 'input_tokens', 'output_tokens', 'cache_read_tokens', 'cache_creation_tokens', 'thinking_tokens'] as const;
+export type CostColumns = { [K in (typeof COST_COLS)[number]]: number | null };
+export type CostFields = Partial<CostColumns>;
+function costValues(c: CostFields): (number | null)[] {
+  return COST_COLS.map((col) => c[col] ?? null);
+}
+export type DraftInput = Omit<Draft, 'id' | 'created_at' | 'final_text' | 'sent_ts' | 'judge_cost_usd' | keyof CostColumns> &
+  CostFields & { judge_cost_usd?: number | null };
 
 const WATCH_TTL_MS = 3 * 24 * 60 * 60 * 1000;
 
@@ -103,6 +115,14 @@ export function openStore(file: string) {
   if (!cols.includes('archived_at')) db.exec('ALTER TABLE watches ADD COLUMN archived_at INTEGER');
   const draftCols = (db.prepare('PRAGMA table_info(drafts)').all() as { name: string }[]).map((c) => c.name);
   if (!draftCols.includes('hold_reason')) db.exec('ALTER TABLE drafts ADD COLUMN hold_reason TEXT');
+  const summaryCols = (db.prepare('PRAGMA table_info(summaries)').all() as { name: string }[]).map((c) => c.name);
+  const costType = (col: string) => (col === 'cost_usd' ? 'REAL' : 'INTEGER');
+  for (const col of COST_COLS) {
+    if (!draftCols.includes(col)) db.exec(`ALTER TABLE drafts ADD COLUMN ${col} ${costType(col)}`);
+    if (!summaryCols.includes(col)) db.exec(`ALTER TABLE summaries ADD COLUMN ${col} ${costType(col)}`);
+  }
+  if (!draftCols.includes('judge_cost_usd')) db.exec('ALTER TABLE drafts ADD COLUMN judge_cost_usd REAL');
+  if (!summaryCols.includes('edit_mark')) db.exec('ALTER TABLE summaries ADD COLUMN edit_mark TEXT');
 
   return {
     getSetting(key: string, fallback: string): string {
@@ -210,20 +230,26 @@ export function openStore(file: string) {
       }));
     },
 
-    insertSummary(key: string, basisTs: string, body: object) {
-      db.prepare('INSERT INTO summaries (key, basis_ts, body, created_at) VALUES (?, ?, ?, ?)').run(key, basisTs, JSON.stringify(body), Date.now());
+    insertSummary(key: string, basisTs: string, body: object, extra: CostFields & { edit_mark?: string | null } = {}) {
+      db.prepare(
+        `INSERT INTO summaries (key, basis_ts, body, created_at, edit_mark, ${COST_COLS.join(', ')}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).run(key, basisTs, JSON.stringify(body), Date.now(), extra.edit_mark ?? null, ...costValues(extra));
     },
     latestSummary(key: string): Summary | undefined {
       return db.prepare('SELECT * FROM summaries WHERE key = ? ORDER BY id DESC LIMIT 1').get(key) as Summary | undefined;
     },
 
-    insertDraft(d: Omit<Draft, 'id' | 'created_at' | 'final_text' | 'sent_ts'>): number {
+    insertDraft(d: DraftInput): number {
       const r = db
         .prepare(
-          `INSERT INTO drafts (key, channel, root_ts, basis_ts, category, risk, confidence, reason, draft_text, status, hold_reason, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO drafts (key, channel, root_ts, basis_ts, category, risk, confidence, reason, draft_text, status, hold_reason, created_at,
+             judge_cost_usd, ${COST_COLS.join(', ')})
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
-        .run(d.key, d.channel, d.root_ts, d.basis_ts, d.category, d.risk, d.confidence, d.reason, d.draft_text, d.status, d.hold_reason, Date.now());
+        .run(
+          d.key, d.channel, d.root_ts, d.basis_ts, d.category, d.risk, d.confidence, d.reason, d.draft_text, d.status, d.hold_reason, Date.now(),
+          d.judge_cost_usd ?? null, ...costValues(d),
+        );
       return Number(r.lastInsertRowid);
     },
     getDraft(id: number): Draft | undefined {

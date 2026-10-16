@@ -6,6 +6,20 @@ import { extractMentions } from './router.js';
 
 const DM_HISTORY = 20;
 const THREAD_KEEP = 60; // 긴 스레드는 기본으로 본문 + 최근 60개만 쓴다 (요약은 더 많이)
+const MESSAGE_MAX = 1500; // 메시지 하나가 프롬프트를 독차지하지 않게 하는 글자 상한
+const KEEP_TAIL = 5; // 판단에 가장 중요한 최근 메시지는 상한 없이 원문 그대로
+
+// 루트(본문)와 마지막 keepTail개는 원문 그대로 두고, 그 사이 긴 메시지는 앞부분만 남긴다
+export function capMessages<T extends { ts: string; text: string }>(
+  messages: T[],
+  opts: { max?: number; keepTail?: number; rootTs?: string | null } = {},
+): T[] {
+  const { max = MESSAGE_MAX, keepTail = KEEP_TAIL, rootTs = null } = opts;
+  const tailFrom = messages.length - keepTail;
+  return messages.map((m, i) =>
+    m.ts === rootTs || i >= tailFrom || m.text.length <= max ? m : { ...m, text: `${m.text.slice(0, max)} …(${m.text.length - max}자 생략)` },
+  );
+}
 
 // 페이지를 합친 결과는 순서·중복이 보장되지 않으므로 ts로 정리하고, 본문(루트)은 항상 남긴다
 export function trimThread<T extends { ts: string }>(messages: T[], rootTs: string, keep: number): T[] {
@@ -85,9 +99,10 @@ export function createConversationReader(client: WebClient, myUserId: string, my
         text = text.replaceAll(`<@${id}>`, `@${id === myUserId ? '나' : await nameOf(id)}`);
       }
       text = readableGroupMentions(text, myGroups());
-      out.push({ ts: m.ts, user: m.user, name: await nameOf(m.user), text, mentions });
+      const edited = (m as { edited?: { ts?: string } }).edited?.ts;
+      out.push({ ts: m.ts, user: m.user, name: await nameOf(m.user), text, mentions, ...(edited ? { edited } : {}) });
     }
-    return out;
+    return capMessages(out, { rootTs });
   }
 
   return { read, nameOf };

@@ -41,3 +41,18 @@ test('같은 상대의 댓글이 늘어도 context는 그대로 (프롬프트 �
   assert.ok(!a.context.includes('질문'));
   assert.notEqual(a.conversation, b.conversation);
 });
+
+test('myScope: none이면 기존 context와 같고, 값이 같으면 매번 같고, 바뀌면 담당 섹션만 다르다', () => {
+  const persona: Persona = { styleGuide: 'STYLE', relationships: [], pairs: [pair('UA', 'a1')] };
+  const t = [{ ts: '1', user: 'UA', name: '서연', text: '질문' }];
+  const base = buildPrompt(t, persona, 'UME');
+  assert.equal(buildPrompt(t, persona, 'UME', 'none').context, base.context);
+  const a = buildPrompt(t, persona, 'UME', '배송앱·관리자 웹');
+  assert.equal(buildPrompt(t, persona, 'UME', '배송앱·관리자 웹').context, a.context);
+  assert.match(a.context, /STYLE\n\n# 내 담당 업무\n배송앱·관리자 웹\n\n# 이 대화 상대와의 관계/);
+  const b = buildPrompt(t, persona, 'UME', '정산');
+  const strip = (s: string) => s.replace(/\n\n# 내 담당 업무\n[^\n]*/, '');
+  assert.equal(strip(a.context), base.context);
+  assert.equal(strip(b.context), base.context);
+  assert.equal(a.conversation, base.conversation);
+});

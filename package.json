@@ -10,7 +10,9 @@
     "send-as-me": "tsc && node dist/scripts/send-as-me.js",
     "persona:collect": "tsc && node dist/persona/collect.js",
     "persona:analyze": "tsc && node dist/persona/analyze.js",
-    "ctl": "node --no-warnings dist/ctl/index.js"
+    "ctl": "node --no-warnings dist/ctl/index.js",
+    "replay:judge": "tsc && node dist/replay/judge.js",
+    "replay:check-base": "tsc && node dist/replay/check-base.js"
   },
   "license": "ISC",
   "type": "commonjs",

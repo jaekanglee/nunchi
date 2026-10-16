@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { DatabaseSync } from 'node:sqlite';
 import { badgeCount, openStore, replyState, summaryState } from './db.js';
 
 test('감시 등록 후 isWatched, OFF로 바꾸면 해제', () => {
@@ -150,4 +151,81 @@ test('목록에 답 필요 상태 포함', () => {
 test('badgeCount: 직접 확인·승인 대기 대화만 센다', () => {
   const states = ['urgent', 'need', 'need', 'auto', 'replied', 'none', 'unknown', 'off'] as const;
   assert.equal(badgeCount(states.map((reply_state) => ({ reply_state }))), 3);
+});
+
+const baseDraft = {
+  key: 'C1:1', channel: 'C1', root_ts: '1', basis_ts: '2', category: '일반', risk: 1, confidence: 0.9,
+  reason: 'r', draft_text: 'd', status: 'pending' as const, hold_reason: null,
+};
+
+test('초안 비용·토큰·judge_cost_usd 저장과 조회, 없는 값은 null', () => {
+  const s = openStore(':memory:');
+  const id = s.insertDraft({
+    ...baseDraft, judge_cost_usd: 0.001, cost_usd: 0.02, input_tokens: 10, output_tokens: 20,
+    cache_read_tokens: 30, cache_creation_tokens: 40, thinking_tokens: 5,
+  });
+  const d = s.getDraft(id)!;
+  assert.equal(d.judge_cost_usd, 0.001);
+  assert.equal(d.cost_usd, 0.02);
+  assert.deepEqual([d.input_tokens, d.output_tokens, d.cache_read_tokens, d.cache_creation_tokens, d.thinking_tokens], [10, 20, 30, 40, 5]);
+  const bare = s.getDraft(s.insertDraft(baseDraft))!;
+  assert.equal(bare.judge_cost_usd, null);
+  assert.equal(bare.cost_usd, null);
+  assert.equal(bare.thinking_tokens, null);
+});
+
+test('요약 비용·토큰·edit_mark 저장과 조회, 생략하면 null', () => {
+  const s = openStore(':memory:');
+  s.insertSummary('C1:1', '5', { a: 1 }, { edit_mark: '7', cost_usd: 0.03, input_tokens: 1, output_tokens: 2, thinking_tokens: null });
+  const got = s.latestSummary('C1:1')!;
+  assert.equal(got.edit_mark, '7');
+  assert.equal(got.cost_usd, 0.03);
+  assert.equal(got.output_tokens, 2);
+  assert.equal(got.thinking_tokens, null);
+  assert.equal(got.cache_read_tokens, null);
+  s.insertSummary('C1:1', '6', { a: 2 });
+  const plain = s.latestSummary('C1:1')!;
+  assert.equal(plain.edit_mark, null);
+  assert.equal(plain.cost_usd, null);
+});
+
+test('이전 스키마 DB를 열면 새 컬럼이 추가되고 기존 행은 보존된다', (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'slmmury-mig-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const file = path.join(dir, 'old.db');
+  const old = new DatabaseSync(file);
+  old.exec(`
+    CREATE TABLE drafts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, key TEXT NOT NULL, channel TEXT NOT NULL, root_ts TEXT,
+      basis_ts TEXT NOT NULL, category TEXT NOT NULL, risk INTEGER NOT NULL, confidence REAL NOT NULL,
+      reason TEXT NOT NULL, draft_text TEXT NOT NULL, final_text TEXT, status TEXT NOT NULL,
+      created_at INTEGER NOT NULL, sent_ts TEXT
+    );
+    CREATE TABLE summaries (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, key TEXT NOT NULL, basis_ts TEXT NOT NULL,
+      body TEXT NOT NULL, created_at INTEGER NOT NULL
+    );
+    INSERT INTO drafts (key, channel, root_ts, basis_ts, category, risk, confidence, reason, draft_text, status, created_at)
+      VALUES ('C1:1', 'C1', '1', '2', '일반', 1, 0.5, 'r', 'old', 'sent', 1);
+    INSERT INTO summaries (key, basis_ts, body, created_at) VALUES ('C1:1', '2', '{}', 1);
+  `);
+  old.close();
+
+  const s = openStore(file);
+  const d = s.getDraft(1)!;
+  assert.equal(d.draft_text, 'old');
+  assert.equal(d.cost_usd, null);
+  assert.equal(d.judge_cost_usd, null);
+  const sum = s.latestSummary('C1:1')!;
+  assert.equal(sum.basis_ts, '2');
+  assert.equal(sum.edit_mark, null);
+  const id = s.insertDraft({ ...baseDraft, judge_cost_usd: 0.5, cost_usd: 1 });
+  assert.equal(s.getDraft(id)!.judge_cost_usd, 0.5);
+
+  const check = new DatabaseSync(file);
+  const names = (table: string) => (check.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]).map((c) => c.name);
+  const cost = ['cost_usd', 'input_tokens', 'output_tokens', 'cache_read_tokens', 'cache_creation_tokens', 'thinking_tokens'];
+  for (const c of [...cost, 'judge_cost_usd', 'hold_reason']) assert.ok(names('drafts').includes(c), c);
+  for (const c of [...cost, 'edit_mark']) assert.ok(names('summaries').includes(c), c);
+  check.close();
 });

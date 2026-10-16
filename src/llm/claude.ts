@@ -27,7 +27,45 @@ export type ClaudeOptions = {
   llm?: Partial<Llm>;
 };
 
-export type ClaudeResult<T> = { output: T; costUsd: number };
+// 없는 필드는 null로 둔다(DB에도 NULL로 저장)
+export type Usage = {
+  input: number | null;
+  output: number | null;
+  cacheRead: number | null;
+  cacheCreation: number | null;
+  thinking: number | null;
+};
+
+export type ClaudeResult<T> = { output: T; costUsd: number; usage: Usage };
+
+const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+
+// usage 아래 어디에 있든 이름에 thinking/reasoning이 들어간 첫 숫자 필드를 thinking 토큰으로 본다
+function findThinking(v: unknown, depth = 0): number | null {
+  if (v == null || typeof v !== 'object' || depth > 3) return null;
+  for (const [k, x] of Object.entries(v as Record<string, unknown>)) {
+    if (/thinking|reasoning/i.test(k) && num(x) != null) return num(x);
+  }
+  for (const x of Object.values(v as Record<string, unknown>)) {
+    const t = findThinking(x, depth + 1);
+    if (t != null) return t;
+  }
+  return null;
+}
+
+export function parseUsage(res: unknown): Usage {
+  const u = res != null && typeof res === 'object' ? (res as { usage?: Record<string, unknown> }).usage : undefined;
+  if (u == null || typeof u !== 'object') {
+    return { input: null, output: null, cacheRead: null, cacheCreation: null, thinking: null };
+  }
+  return {
+    input: num(u.input_tokens),
+    output: num(u.output_tokens),
+    cacheRead: num(u.cache_read_input_tokens),
+    cacheCreation: num(u.cache_creation_input_tokens),
+    thinking: findThinking(u),
+  };
+}
 
 export function runClaude<T>(opts: ClaudeOptions): Promise<ClaudeResult<T>> {
   // system 프롬프트(말투 가이드 포함)는 길어질 수 있어 파일로 넘긴다. Windows 명령줄 길이 제한(약 32K자) 대비
@@ -67,9 +105,10 @@ export function runClaude<T>(opts: ClaudeOptions): Promise<ClaudeResult<T>> {
       if (res.is_error || res.structured_output == null) {
         return reject(new Error(`claude 오류 (${res.subtype ?? res.terminal_reason}): ${res.result ?? ''}`));
       }
-      const u = res.usage ?? {};
-      console.log(`[claude] ${opts.llm?.model ?? DEFAULT_LLM.model} 캐시읽기 ${u.cache_read_input_tokens ?? 0} · 캐시쓰기 ${u.cache_creation_input_tokens ?? 0} · 입력 ${u.input_tokens ?? 0} · 출력 ${u.output_tokens ?? 0} · $${(res.total_cost_usd ?? 0).toFixed(4)}`);
-      resolve({ output: res.structured_output as T, costUsd: res.total_cost_usd ?? 0 });
+      const usage = parseUsage(res);
+      const costUsd: number = res.total_cost_usd ?? 0;
+      console.log(`[claude] ${opts.llm?.model ?? DEFAULT_LLM.model} 캐시읽기 ${usage.cacheRead ?? 0} · 캐시쓰기 ${usage.cacheCreation ?? 0} · 입력 ${usage.input ?? 0} · 출력 ${usage.output ?? 0} (thinking ${usage.thinking ?? '-'}) · $${costUsd.toFixed(4)}`);
+      resolve({ output: res.structured_output as T, costUsd, usage });
     });
     child.stdin.end(opts.prompt);
   });

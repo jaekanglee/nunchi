@@ -1,5 +1,5 @@
 // 대화 하나를 요약한다. 내가 원할 때 버튼으로 실행. (design.md §4.7)
-import { runClaude, type Llm } from '../llm/claude.js';
+import { runClaude, type ClaudeResult, type Llm } from '../llm/claude.js';
 import type { ThreadMessage } from '../responder/prompt.js';
 
 export type ConversationSummary = {
@@ -39,13 +39,37 @@ const SCHEMA = {
   },
 };
 
-export async function summarizeConversation(thread: ThreadMessage[], myUserId: string, llm?: Llm): Promise<ConversationSummary> {
+export type PrevSummary = { body: string; basis_ts: string; edit_mark: string | null };
+export type SummaryPlan =
+  | { kind: 'full' }
+  | { kind: 'incremental'; prevBody: string; newMessages: ThreadMessage[] }
+  | { kind: 'none' };
+
+const after = (a: string, b: string) => Number(a) > Number(b);
+
+// 이전 요약을 이어 쓸 수 있으면 기준(basis_ts) 이후 메시지만 보낸다. Slack ts끼리만 비교한다.
+// 전체 요약으로 돌아가는 경우: 이전 요약 없음, 기준 메시지를 못 찾음(삭제·DM 읽기 상한 밖), 기준 이전 메시지가 요약 뒤 수정됨
+export function planSummary(thread: ThreadMessage[], prev?: PrevSummary): SummaryPlan {
+  if (!prev || !thread.some((m) => m.ts === prev.basis_ts)) return { kind: 'full' };
+  const mark = prev.edit_mark ?? prev.basis_ts;
+  if (thread.some((m) => !after(m.ts, prev.basis_ts) && m.edited !== undefined && after(m.edited, mark))) return { kind: 'full' };
+  const newMessages = thread.filter((m) => after(m.ts, prev.basis_ts));
+  return newMessages.length ? { kind: 'incremental', prevBody: prev.body, newMessages } : { kind: 'none' };
+}
+
+// 요약에 함께 저장할 수정 기준: 기준 ts와 읽은 메시지들의 edited 중 가장 나중
+export function editMark(thread: ThreadMessage[], basisTs: string): string {
+  return thread.reduce((mark, m) => (m.edited !== undefined && after(m.edited, mark) ? m.edited : mark), basisTs);
+}
+
+// prevBody가 있으면 thread는 이전 요약 이후의 새 메시지만이다
+export async function summarizeConversation(thread: ThreadMessage[], myUserId: string, llm?: Llm, prevBody?: string): Promise<ClaudeResult<ConversationSummary>> {
   const transcript = thread.map((m) => `[${m.user === myUserId ? '나' : m.name}] ${m.text}`).join('\n');
-  const { output } = await runClaude<ConversationSummary>({
-    system: SYSTEM,
-    prompt: `<conversation>\n${transcript}\n</conversation>`,
-    schema: SCHEMA,
-    llm,
-  });
-  return output;
+  const prompt =
+    prevBody === undefined
+      ? `<conversation>\n${transcript}\n</conversation>`
+      : `# 이전 요약 (아래 새 메시지 직전까지의 대화를 요약한 것)\n<previous_summary>\n${prevBody}\n</previous_summary>\n\n` +
+        `# 이전 요약 이후 새 메시지\n<conversation>\n${transcript}\n</conversation>\n\n` +
+        '이전 요약과 새 메시지를 합쳐 지금 시점 기준으로 전체 요약을 다시 써라.';
+  return runClaude<ConversationSummary>({ system: SYSTEM, prompt, schema: SCHEMA, llm });
 }
