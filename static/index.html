@@ -192,6 +192,9 @@
     /* 첫 실행 설정 */
     #settings { position: fixed; inset: 0; z-index: 9; background: var(--bg); overflow: auto; padding: 48px 24px 40px; -webkit-app-region: drag; }
     #settings[hidden] { display: none; }
+    #archive { position: fixed; inset: 0; z-index: 10; background: var(--bg); overflow: auto; padding: 48px 24px 40px; -webkit-app-region: drag; }
+    #archive[hidden] { display: none; }
+    #archive .wrap { max-width: 680px; margin: 0 auto; -webkit-app-region: no-drag; }
     #settings .wrap { max-width: 680px; margin: 0 auto; -webkit-app-region: no-drag; }
     .settings-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
     .settings-head h1 { font-size: 22px; margin: 0; }
@@ -353,6 +356,12 @@
       </div>
 
       <div class="card step">
+        <h3>보관함</h3>
+        <div class="hint">보관한 대화를 모아 보고 복원하거나 삭제합니다. 보관한 대화는 감지하지 않습니다.</div>
+        <div class="row" style="margin-top:10px"><button id="openArchive" class="btn">보관한 대화 보기</button></div>
+      </div>
+
+      <div class="card step">
         <h3>광고 배너</h3>
         <div class="hint">사이드바 맨 아래에 띄울 광고 페이지 주소(https)입니다. 광고 페이지는 앱과 분리된 창(iframe)에서 열려 Slack 토큰이나 메시지에 접근할 수 없고, 광고를 누르면 기본 브라우저로 열립니다. 비우면 배너를 숨깁니다.</div>
         <div class="srow"><div><b>광고 페이지 주소</b><small>예: https://내도메인/slmmury-ad.html</small></div><input id="adUrl" class="input" placeholder="https://…" style="width:280px" /></div>
@@ -362,6 +371,13 @@
         <h3>원격 제어</h3>
         <div class="hint">밖에서는 SSH로 들어와 저장소 폴더에서 <code>npm run ctl -- status</code>, <code>pause</code>, <code>set model …</code> 등으로 같은 설정을 바꿀 수 있습니다.</div>
       </div>
+    </div>
+  </div>
+
+  <div id="archive" hidden>
+    <div class="wrap">
+      <div class="settings-head"><h1>보관함</h1><button id="closeArchive" class="btn">← 설정으로 돌아가기</button></div>
+      <div id="archiveList"></div>
     </div>
   </div>
 
@@ -860,6 +876,7 @@
       $('watches').replaceChildren(...state.watches.map(watchRow));
       tick();
       renderDetail();
+      if (!$('archive').hidden) renderArchive();
     }
 
     makeResizer($('sideDivider'), '--side-w', 340, 240, (x) => x, () => Math.min(560, window.innerWidth - 520));
@@ -926,7 +943,25 @@
       };
     }
     $('closeSettings').onclick = () => ($('settings').hidden = true);
-    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && $('guide').hidden && $('setup').hidden) $('settings').hidden = true; });
+    // 보관함: 설정 아래 한 단계 더 들어가는 화면
+    async function renderArchive() {
+      const rows = await api.listArchived();
+      $('archiveList').replaceChildren(...(rows.length ? rows.map((w) => el('div', { className: 'card step' },
+        el('div', { className: 'srow' },
+          el('div', {},
+            el('b', { textContent: w.topic ?? w.title ?? w.key }),
+            el('small', { textContent: [w.channel_name, `${new Date(w.archived_at).toLocaleString()} 보관`].filter(Boolean).join(' · ') })),
+          el('span', { style: 'display:flex;gap:6px;flex:none' },
+            el('button', { className: 'btn primary', textContent: '복원', onclick: (e) => act(e.currentTarget, '복원 중…', async () => { await api.restoreArchived(w.key); toast('복원했습니다. 감지를 다시 시작합니다'); }) }),
+            el('button', { className: 'btn', textContent: '삭제', onclick: (e) => act(e.currentTarget, '삭제 중…', () => api.deleteArchived(w.key)) }))))) : [el('div', { className: 'card empty', textContent: '보관한 대화가 없습니다' })]));
+    }
+    $('openArchive').onclick = async () => { await renderArchive(); $('archive').hidden = false; };
+    $('closeArchive').onclick = () => ($('archive').hidden = true);
+    document.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape') return;
+      if (!$('archive').hidden) $('archive').hidden = true;
+      else if ($('guide').hidden && $('setup').hidden) $('settings').hidden = true;
+    });
     $('recheckClaude').onclick = loadSetup;
 
     // ---- Slack 연결 가이드 ----

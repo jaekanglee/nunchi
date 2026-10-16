@@ -122,6 +122,14 @@ export function createEngine(deps: EngineDeps) {
     }, delay));
   }
 
+  // 대화의 대기 중인 판단 예약을 취소한다
+  function cancel(key: string) {
+    clearTimeout(timers.get(key));
+    timers.delete(key);
+    due.delete(key);
+    rerun.delete(key);
+  }
+
   // LLM 없이 "내 차례 아님"을 기록한다
   function skipWithoutDraft(key: string, channel: string, rootTs: string | null, basisTs: string, category: string, reason: string) {
     store.supersedeOpen(key);
@@ -138,7 +146,7 @@ export function createEngine(deps: EngineDeps) {
     try {
       if (store.getSetting('paused', 'off') === 'on') return; // 전체 일시정지
       const watch = store.getWatch(key);
-      if (!watch || watch.mode === 'off') return;
+      if (!watch || watch.mode === 'off' || store.isBlocked(key)) return;
       const { channel, rootTs } = splitKey(key);
       const thread = await read(channel, rootTs);
       remember(key, thread, rootTs === null);
@@ -161,6 +169,7 @@ export function createEngine(deps: EngineDeps) {
       }
 
       const result = await generateDraft(thread, deps.persona, myUserId, main);
+      if (store.isBlocked(key) || !store.getWatch(key)) return; // 작업 중에 삭제·보관됨
       const sendMode: SendMode = watch.mode === 'draft' ? 'draft' : (store.getSetting('sendMode', 'draft') as SendMode);
       const t = thresholds();
       const decision = decide(result, sendMode, t);
@@ -294,6 +303,7 @@ export function createEngine(deps: EngineDeps) {
 
     async handleEvent(e: MessageEvent) {
       const key = threadKey(e);
+      if (store.isBlocked(key)) return; // 삭제·보관한 대화는 완전히 무시
       // 감시 중인 대화면 마지막 메시지를 목록에 반영
       if (e.subtype === undefined && e.user && store.getWatch(key)) {
         const name = e.user === myUserId ? '나' : await deps.readConversation.nameOf(e.user);
@@ -326,9 +336,29 @@ export function createEngine(deps: EngineDeps) {
       const isDm = target.channel.startsWith('D') && target.rootTs === target.ts;
       const rootTs = isDm ? null : target.rootTs;
       const key = `${target.channel}:${rootTs ?? 'dm'}`;
+      store.unblock(key); // 직접 링크로 등록하면 삭제·보관을 풀고 다시 감시
       store.addWatch(key, target.channel, rootTs, 'link');
       deps.onChange();
       await process(key);
+    },
+
+    // 삭제: DB에서 지우고 이후 이벤트는 무시
+    forget(key: string) {
+      cancel(key);
+      store.deleteWatch(key);
+      deps.onChange();
+    },
+    // 보관: 목록에서 빼고 감지를 멈춘다. 열린 초안은 무효
+    archive(key: string) {
+      cancel(key);
+      store.supersedeOpen(key);
+      store.archiveWatch(key);
+      deps.onChange();
+    },
+    // 복원: 목록에 다시 나타나고 감지를 재개한다
+    restore(key: string) {
+      store.unarchiveWatch(key);
+      deps.onChange();
     },
 
     summarize,

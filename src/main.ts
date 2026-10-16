@@ -1,6 +1,6 @@
 import 'dotenv/config';
 import path from 'node:path';
-import { app, BrowserWindow, clipboard, ipcMain, Menu, nativeImage, Notification, screen, shell } from 'electron';
+import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, Notification, screen, shell } from 'electron';
 import { startGateway } from './slack/gateway.js';
 import { createConversationReader } from './slack/conversation.js';
 import { hasPersona, loadPersona } from './responder/draft.js';
@@ -85,7 +85,36 @@ async function boot() {
           win.webContents.send('toast', '원문 링크를 복사했습니다');
         },
       },
+      { type: 'separator' },
+      { label: '보관', click: () => ready().archive(key) },
+      {
+        label: '대화창 삭제',
+        click: async () => {
+          const { response } = await dialog.showMessageBox(win, {
+            type: 'warning',
+            buttons: ['삭제', '취소'],
+            defaultId: 1,
+            cancelId: 1,
+            message: '이 대화를 삭제할까요?',
+            detail: 'DB에서 완전히 지워지고, 이후 이 대화의 메시지는 감지하지 않습니다.',
+          });
+          if (response === 0) ready().forget(key);
+        },
+      },
     ]).popup({ window: win });
+  });
+  ipcMain.handle('archive:list', () => store.listArchived());
+  ipcMain.handle('archive:restore', (_ev, key: string) => ready().restore(key));
+  ipcMain.handle('archive:delete', async (_ev, key: string) => {
+    const { response } = await dialog.showMessageBox(win, {
+      type: 'warning',
+      buttons: ['삭제', '취소'],
+      defaultId: 1,
+      cancelId: 1,
+      message: '보관한 대화를 삭제할까요?',
+      detail: 'DB에서 완전히 지워지고, 이후 이 대화의 메시지는 감지하지 않습니다.',
+    });
+    if (response === 0) ready().forget(key);
   });
   ipcMain.handle('draft:request', (_ev, key: string, hint: string) => ready().requestDraft(key, hint));
   ipcMain.handle('watch:openSlack', (_ev, key: string) => {

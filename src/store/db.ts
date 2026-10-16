@@ -21,6 +21,7 @@ export type Watch = {
   channel_name: string | null; // #채널 이름, DM, 그룹 DM
   first_ts: string | null; // 대화 시작 시각 (스레드는 본문, DM은 읽은 것 중 가장 오래된 메시지)
   participants: string | null; // 참여자 이름 JSON 배열
+  archived_at: number | null; // 보관한 시각. 있으면 목록에서 빠지고 감시도 안 한다
 };
 export type Summary = { id: number; key: string; basis_ts: string; body: string; created_at: number };
 export type SummaryState = 'none' | 'fresh' | 'outdated';
@@ -88,6 +89,7 @@ export function openStore(file: string) {
       reason TEXT NOT NULL, draft_text TEXT NOT NULL, final_text TEXT, status TEXT NOT NULL,
       created_at INTEGER NOT NULL, sent_ts TEXT
     );
+    CREATE TABLE IF NOT EXISTS deleted_keys (key TEXT PRIMARY KEY);
     CREATE TABLE IF NOT EXISTS summaries (
       id INTEGER PRIMARY KEY AUTOINCREMENT, key TEXT NOT NULL, basis_ts TEXT NOT NULL,
       body TEXT NOT NULL, created_at INTEGER NOT NULL
@@ -98,6 +100,7 @@ export function openStore(file: string) {
   for (const col of ['title', 'last_ts', 'last_name', 'last_text', 'model', 'effort', 'topic', 'channel_name', 'first_ts', 'participants']) {
     if (!cols.includes(col)) db.exec(`ALTER TABLE watches ADD COLUMN ${col} TEXT`);
   }
+  if (!cols.includes('archived_at')) db.exec('ALTER TABLE watches ADD COLUMN archived_at INTEGER');
   const draftCols = (db.prepare('PRAGMA table_info(drafts)').all() as { name: string }[]).map((c) => c.name);
   if (!draftCols.includes('hold_reason')) db.exec('ALTER TABLE drafts ADD COLUMN hold_reason TEXT');
 
@@ -125,6 +128,39 @@ export function openStore(file: string) {
     isWatched(key: string): boolean {
       const w = this.getWatch(key);
       return w !== undefined && w.mode !== 'off' && Date.now() - w.last_activity_at < WATCH_TTL_MS;
+    },
+    // 삭제했거나 보관한 대화: 이벤트를 완전히 무시한다
+    isBlocked(key: string): boolean {
+      if (this.getWatch(key)?.archived_at != null) return true;
+      return db.prepare('SELECT 1 FROM deleted_keys WHERE key = ?').get(key) !== undefined;
+    },
+    // 링크로 직접 다시 등록할 때: 삭제·보관 표시를 푼다
+    unblock(key: string) {
+      db.prepare('DELETE FROM deleted_keys WHERE key = ?').run(key);
+      db.prepare('UPDATE watches SET archived_at = NULL WHERE key = ?').run(key);
+    },
+    deleteWatch(key: string) {
+      db.exec('BEGIN');
+      try {
+        db.prepare('DELETE FROM drafts WHERE key = ?').run(key);
+        db.prepare('DELETE FROM summaries WHERE key = ?').run(key);
+        db.prepare('DELETE FROM watches WHERE key = ?').run(key);
+        db.prepare('INSERT OR IGNORE INTO deleted_keys (key) VALUES (?)').run(key);
+        db.exec('COMMIT');
+      } catch (err) {
+        db.exec('ROLLBACK');
+        throw err;
+      }
+    },
+    archiveWatch(key: string) {
+      db.prepare('UPDATE watches SET archived_at = ? WHERE key = ?').run(Date.now(), key);
+    },
+    // 복원하면 활동 시각을 갱신해 3일 TTL에 걸려 바로 사라지지 않게 한다
+    unarchiveWatch(key: string) {
+      db.prepare('UPDATE watches SET archived_at = NULL, last_activity_at = ? WHERE key = ?').run(Date.now(), key);
+    },
+    listArchived(): Watch[] {
+      return db.prepare('SELECT * FROM watches WHERE archived_at IS NOT NULL ORDER BY archived_at DESC').all() as Watch[];
     },
     touchWatch(key: string) {
       db.prepare('UPDATE watches SET last_activity_at = ? WHERE key = ?').run(Date.now(), key);
@@ -164,7 +200,7 @@ export function openStore(file: string) {
           `SELECT w.*, (SELECT basis_ts FROM summaries s WHERE s.key = w.key ORDER BY id DESC LIMIT 1) AS summary_ts,
              (SELECT status FROM drafts d WHERE d.key = w.key ORDER BY id DESC LIMIT 1) AS draft_status,
              (SELECT basis_ts FROM drafts d WHERE d.key = w.key ORDER BY id DESC LIMIT 1) AS draft_basis_ts
-           FROM watches w WHERE last_activity_at > ? ORDER BY last_activity_at DESC`,
+           FROM watches w WHERE archived_at IS NULL AND last_activity_at > ? ORDER BY last_activity_at DESC`,
         )
         .all(Date.now() - WATCH_TTL_MS) as (Watch & { summary_ts: string | null; draft_status: string | null; draft_basis_ts: string | null })[];
       return rows.map(({ draft_status, draft_basis_ts, ...w }) => ({

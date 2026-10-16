@@ -16,6 +16,33 @@ test('감시 등록 후 isWatched, OFF로 바꾸면 해제', () => {
   assert.equal(s.getWatch('C1:1.0')?.mode, 'off');
 });
 
+test('보관: 목록에서 빠지고 차단, 복원하면 다시 목록·감시', () => {
+  const s = openStore(':memory:');
+  s.addWatch('C1:1.0', 'C1', '1.0', 'mention');
+  s.archiveWatch('C1:1.0');
+  assert.equal(s.isBlocked('C1:1.0'), true);
+  assert.equal(s.listWatches().length, 0);
+  assert.deepEqual(s.listArchived().map((w) => w.key), ['C1:1.0']);
+  s.unarchiveWatch('C1:1.0');
+  assert.equal(s.isBlocked('C1:1.0'), false);
+  assert.equal(s.listWatches().length, 1);
+  assert.equal(s.listArchived().length, 0);
+});
+
+test('삭제: 대화·초안·요약을 지우고 이후 차단, 링크 재등록 시 해제', () => {
+  const s = openStore(':memory:');
+  s.addWatch('C1:1.0', 'C1', '1.0', 'mention');
+  s.insertDraft({ key: 'C1:1.0', channel: 'C1', root_ts: '1.0', basis_ts: '2.0', category: 'x', risk: 0, confidence: 1, reason: '', draft_text: 'x', status: 'pending', hold_reason: null });
+  s.insertSummary('C1:1.0', '2.0', { topic: 't' });
+  s.deleteWatch('C1:1.0');
+  assert.equal(s.getWatch('C1:1.0'), undefined);
+  assert.equal(s.listDraftsByKey('C1:1.0').length, 0);
+  assert.equal(s.latestSummary('C1:1.0'), undefined);
+  assert.equal(s.isBlocked('C1:1.0'), true);
+  s.unblock('C1:1.0');
+  assert.equal(s.isBlocked('C1:1.0'), false);
+});
+
 test('새 메시지가 오면 같은 대화의 열린 초안은 superseded', () => {
   const s = openStore(':memory:');
   const base = { key: 'C1:1.0', channel: 'C1', root_ts: '1.0', basis_ts: '2.0', category: '정보질문', risk: 10, confidence: 0.9, reason: '', draft_text: 'x', hold_reason: '확신 0.6' };
