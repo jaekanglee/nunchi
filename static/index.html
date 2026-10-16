@@ -362,6 +362,12 @@
       </div>
 
       <div class="card step">
+        <h3>내 담당 업무</h3>
+        <div class="hint">1차 판단과 초안이 내 담당과 무관한 대화를 거를 때 씁니다. 비워 두면 말투 분석이 뽑은 값을 씁니다.</div>
+        <div class="srow"><div><b>담당 업무</b><small id="myScopeAuto"></small></div><input id="myScope" class="input" maxlength="300" style="width:280px" /></div>
+      </div>
+
+      <div class="card step">
         <h3>광고 배너</h3>
         <div class="hint">사이드바 맨 아래에 띄울 광고 페이지 주소(https)입니다. 광고 페이지는 앱과 분리된 창(iframe)에서 열려 Slack 토큰이나 메시지에 접근할 수 없고, 광고를 누르면 기본 브라우저로 열립니다. 비우면 배너를 숨깁니다.</div>
         <div class="srow"><div><b>광고 페이지 주소</b><small>예: https://내도메인/slmmury-ad.html</small></div><input id="adUrl" class="input" placeholder="https://…" style="width:280px" /></div>
@@ -865,6 +871,9 @@
       for (const id of TIMING) if (document.activeElement !== $(id)) $(id).value = state.settings[id];
       if (document.activeElement !== $('adUrl')) $('adUrl').value = state.settings.adUrl === 'none' ? '' : state.settings.adUrl;
       renderAd(state.settings.adUrl);
+      if (document.activeElement !== $('myScope')) $('myScope').value = state.settings.myScope === 'none' ? '' : state.settings.myScope;
+      $('myScope').placeholder = state.autoScope || '예: 배송앱·관리자 웹';
+      $('myScopeAuto').textContent = state.autoScope ? `비우면 자동: ${state.autoScope}` : '자동 값 없음 (말투 분석을 다시 하면 생깁니다)';
       const autoCats = state.settings.autoCategories === 'none' ? [] : state.settings.autoCategories.split(',');
       $('autoCategories').replaceChildren(...state.autoEligible.map((c) => el('label', { className: 'opt' },
         el('input', { type: 'checkbox', checked: autoCats.includes(c), value: c, onchange: saveAutoCategories }),
@@ -930,6 +939,10 @@
     $('adUrl').onchange = async () => {
       try { await api.setSetting('adUrl', $('adUrl').value.trim() || 'none'); toast('저장했습니다'); }
       catch (err) { toast(errText(err), 'err'); $('adUrl').value = state.settings.adUrl === 'none' ? '' : state.settings.adUrl; }
+    };
+    $('myScope').onchange = async () => {
+      try { await api.setSetting('myScope', $('myScope').value.trim() || 'none'); toast('저장했습니다. 다음 판단부터 적용됩니다'); }
+      catch (err) { toast(errText(err), 'err'); $('myScope').value = state.settings.myScope === 'none' ? '' : state.settings.myScope; }
     };
     async function saveAutoCategories() {
       const picked = [...$('autoCategories').querySelectorAll('input:checked')].map((i) => i.value);

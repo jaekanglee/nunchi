@@ -51,10 +51,14 @@ export function hasPersona(dir = PERSONA_DIR): boolean {
 // 말투 분석이 뽑은 내 담당 업무 한 줄. 예전에 분석한 persona에는 없을 수 있다
 export const MY_SCOPE_FILE = 'my_scope.txt';
 
+export function loadMyScope(dir = PERSONA_DIR): string {
+  const file = path.join(dir, MY_SCOPE_FILE);
+  return fs.existsSync(file) ? fs.readFileSync(file, 'utf8').trim() : '';
+}
+
 export function loadPersona(dir = PERSONA_DIR): Persona {
   const read = (f: string) => fs.readFileSync(path.join(dir, f), 'utf8');
-  const scopeFile = path.join(dir, MY_SCOPE_FILE);
-  const myScope = fs.existsSync(scopeFile) ? fs.readFileSync(scopeFile, 'utf8').trim() : '';
+  const myScope = loadMyScope(dir);
   return {
     ...(myScope ? { myScope } : {}),
     styleGuide: read('style_guide.md'),

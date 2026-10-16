@@ -3,7 +3,7 @@ import path from 'node:path';
 import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, Notification, screen, shell } from 'electron';
 import { startGateway } from './slack/gateway.js';
 import { createConversationReader } from './slack/conversation.js';
-import { hasPersona, loadPersona } from './responder/draft.js';
+import { hasPersona, loadMyScope, loadPersona } from './responder/draft.js';
 import { badgeCount, openStore, type WatchMode } from './store/db.js';
 import { createEngine } from './engine.js';
 import { EFFORTS, MODELS } from './llm/claude.js';
@@ -36,6 +36,7 @@ async function boot() {
     models: MODELS,
     efforts: EFFORTS,
     autoEligible: AUTO_ELIGIBLE,
+    autoScope: loadMyScope(), // 말투 분석이 뽑은 담당 업무 (설정 화면 안내용)
     openDrafts: store.listOpenDrafts(),
     watches: store.listWatches(),
     timers: engine?.timers() ?? { judge: {}, running: [], send: {} },
