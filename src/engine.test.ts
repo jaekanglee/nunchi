@@ -140,3 +140,32 @@ test('담당 업무: 설정이 none이면 말투 분석 값, 설정하면 그 �
   await engine.addLink(LINK);
   assert.deepEqual(seen, ['배송앱', '정산']);
 });
+
+test('LLM 호출은 대화 여러 개가 한꺼번에 와도 종류와 상관없이 동시에 2개까지만', async () => {
+  const store = openStore(':memory:');
+  let active = 0;
+  let max = 0;
+  const slow = async <T>(output: T): Promise<ClaudeResult<T>> => {
+    max = Math.max(max, ++active);
+    await new Promise((r) => setTimeout(r, 20));
+    active--;
+    return { output, costUsd: 0, usage };
+  };
+  const client = { search: { messages: async () => ({ messages: { matches: [] } }) } } as unknown as WebClient;
+  const engine = createEngine({
+    client,
+    myUserId: 'UME',
+    store,
+    readConversation: { read: async () => [msg('1700000000.000100')], nameOf: async (u: string) => u },
+    persona: { styleGuide: 'S', relationships: [], pairs: [] },
+    notify: () => {},
+    onChange: () => {},
+    summarize: () => slow({ topic: 't', headline: '', points: [], my_todos: [], waiting_on_me: false, waiting_reason: '', next_action: '' }),
+    draft: () =>
+      slow({ needs_my_reply: true, category: '정보질문', risk: 10, needs_facts_i_dont_know: false, confidence: 0.9, reply: '네', reason: 'r', topic: 't' }),
+  });
+  const keys = ['C1:1.0', 'C2:1.0', 'C3:1.0', 'C4:1.0'];
+  for (const k of keys) store.addWatch(k, k.split(':')[0], '1.0', 'link');
+  await Promise.all([engine.summarize(keys[0]), engine.summarize(keys[1]), engine.requestDraft(keys[2], ''), engine.requestDraft(keys[3], '')]);
+  assert.equal(max, 2);
+});

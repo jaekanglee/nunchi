@@ -123,6 +123,8 @@ export function openStore(file: string) {
   }
   if (!draftCols.includes('judge_cost_usd')) db.exec('ALTER TABLE drafts ADD COLUMN judge_cost_usd REAL');
   if (!summaryCols.includes('edit_mark')) db.exec('ALTER TABLE summaries ADD COLUMN edit_mark TEXT');
+  // 목록·대화 화면은 대화별 최신 초안·요약을 자주 찾는다. 인덱스에 id(rowid) 순서가 같이 들어가 ORDER BY id DESC LIMIT 1도 인덱스로 끝난다
+  db.exec('CREATE INDEX IF NOT EXISTS drafts_key ON drafts(key); CREATE INDEX IF NOT EXISTS summaries_key ON summaries(key);');
 
   return {
     getSetting(key: string, fallback: string): string {
@@ -267,8 +269,17 @@ export function openStore(file: string) {
     supersedeOpen(key: string) {
       db.prepare(`UPDATE drafts SET status = 'superseded' WHERE key = ? AND status IN ('pending', 'escalated', 'scheduled')`).run(key);
     },
-    listDraftsByKey(key: string): Draft[] {
-      return db.prepare('SELECT * FROM drafts WHERE key = ? ORDER BY id').all(key) as Draft[];
+    // sinceTs: 이보다 오래된 메시지 기준의 초안은 뺀다 (화면에 안 보이는 기록. DM은 키가 고정이라 끝없이 쌓인다).
+    // 열린 초안, 늘 보이는 스레드 본문 기준 초안, 보낸 메시지가 화면 범위 안인 초안은 남긴다
+    listDraftsByKey(key: string, sinceTs: string | null = null): Draft[] {
+      return db
+        .prepare(
+          `SELECT * FROM drafts WHERE key = ?
+             AND (? IS NULL OR status IN ('pending', 'escalated', 'scheduled') OR basis_ts = root_ts
+               OR CAST(basis_ts AS REAL) >= CAST(? AS REAL) OR CAST(sent_ts AS REAL) >= CAST(? AS REAL))
+           ORDER BY id`,
+        )
+        .all(key, sinceTs, sinceTs, sinceTs) as Draft[];
     },
     // 지금 내가 처리해야 하는 초안 (모든 대화)
     listOpenDrafts(): Draft[] {

@@ -14,6 +14,25 @@ import { resolveLlm, type Llm, type Usage } from './llm/claude.js';
 import { SETTINGS, parseGroups, thresholdsFrom } from './ctl/settings.js';
 
 const SUMMARY_KEEP = 300; // 요약은 긴 스레드도 최근 300개까지 읽는다
+const LLM_CONCURRENCY = 2; // claude -p 하나가 수백 MB를 쓴다 (실측 약 260MB). 여러 대화가 한꺼번에 와도 이만큼만 띄운다
+
+// 동시에 max개까지만 실행하고 나머지는 온 순서대로 기다린다. 끝난 자리는 기다리던 다음 호출에 바로 넘긴다
+function limiter(max: number) {
+  let active = 0;
+  const waiting: (() => void)[] = [];
+  return <A extends unknown[], R>(fn: (...args: A) => Promise<R>) =>
+    async (...args: A): Promise<R> => {
+      if (active < max) active++;
+      else await new Promise<void>((resolve) => waiting.push(resolve));
+      try {
+        return await fn(...args);
+      } finally {
+        const next = waiting.shift();
+        if (next) next();
+        else active--;
+      }
+    };
+}
 
 // runClaude 비용·토큰을 drafts·summaries 비용 컬럼 형태로 바꾼다
 function costFields(r: { costUsd: number; usage: Usage }): CostFields {
@@ -49,9 +68,11 @@ const splitKey = (key: string) => {
 export function createEngine(deps: EngineDeps) {
   const { client, myUserId, store } = deps;
   const read = deps.readConversation.read;
-  const judge = deps.judge ?? judgeTurn;
-  const draft = deps.draft ?? generateDraft;
-  const summarizeLlm = deps.summarize ?? summarizeConversation;
+  // 판단·초안·요약이 claude 실행 자리를 함께 나눠 쓴다
+  const limit = limiter(LLM_CONCURRENCY);
+  const judge = limit(deps.judge ?? judgeTurn);
+  const draft = limit(deps.draft ?? generateDraft);
+  const summarizeLlm = limit(deps.summarize ?? summarizeConversation);
   // 판단·초안을 기다리는 동안 삭제·보관됐으면 결과를 버린다
   const gone = (key: string) => store.isBlocked(key) || !store.getWatch(key);
 

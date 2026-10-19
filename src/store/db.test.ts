@@ -229,3 +229,31 @@ test('이전 스키마 DB를 열면 새 컬럼이 추가되고 기존 행은 보
   for (const c of [...cost, 'edit_mark']) assert.ok(names('summaries').includes(c), c);
   check.close();
 });
+
+test('대화별 최신 초안·요약 조회는 테이블 전체를 훑지 않는다 (key 인덱스)', (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'slmmury-idx-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const file = path.join(dir, 'idx.db');
+  openStore(file);
+  const check = new DatabaseSync(file);
+  const plan = (sql: string) => (check.prepare(`EXPLAIN QUERY PLAN ${sql}`).all('k') as { detail: string }[]).map((r) => r.detail).join(' / ');
+  for (const table of ['drafts', 'summaries']) {
+    assert.match(plan(`SELECT * FROM ${table} WHERE key = ? ORDER BY id DESC LIMIT 1`), /USING INDEX/, table);
+  }
+  check.close();
+});
+
+test('대화 화면 초안 기록: 보이는 메시지보다 오래된 닫힌 초안은 빼고 열린 초안은 남긴다', () => {
+  const s = openStore(':memory:');
+  const add = (basis_ts: string, status: 'pending' | 'skipped' | 'sent') => s.insertDraft({ ...baseDraft, basis_ts, status });
+  const old = add('99.0', 'skipped'); // 문자열로 비교하면 '200.0'보다 크다
+  const oldOpen = add('150.0', 'pending');
+  const recent = add('300.0', 'sent');
+  // 스레드 본문(root_ts '1')은 늘 보이므로 본문 기준 초안도 남긴다
+  const onRoot = add('1', 'skipped');
+  // 기준 메시지는 범위 밖이어도 보낸 메시지가 보이면 남긴다 ("Slmmury가 보냄" 표시)
+  const sentShown = add('150.0', 'sent');
+  s.setDraftStatus(sentShown, 'sent', { sent_ts: '250.0' });
+  assert.deepEqual(s.listDraftsByKey('C1:1', '200.0').map((d) => d.id), [oldOpen, recent, onRoot, sentShown]);
+  assert.deepEqual(s.listDraftsByKey('C1:1').map((d) => d.id), [old, oldOpen, recent, onRoot, sentShown]);
+});

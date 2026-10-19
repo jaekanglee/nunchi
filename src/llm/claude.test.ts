@@ -33,3 +33,49 @@ test('parseUsage: usage가 없으면 모두 null', () => {
   assert.deepEqual(parseUsage({}), { input: null, output: null, cacheRead: null, cacheCreation: null, thinking: null });
   assert.deepEqual(parseUsage(null), { input: null, output: null, cacheRead: null, cacheCreation: null, thinking: null });
 });
+
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { runClaude } from './claude.js';
+
+// PATH 맨 앞에 가짜 claude를 둔다. FAKE_CLAUDE 값으로 동작을 고른다
+function fakeClaude(t: { after: (fn: () => void) => void }) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'slmmury-fake-'));
+  const bin = path.join(dir, 'claude');
+  fs.writeFileSync(
+    bin,
+    `#!/usr/bin/env node
+const fs = require('node:fs');
+fs.writeFileSync(${JSON.stringify(path.join(dir, 'pid'))}, String(process.pid));
+if (process.env.FAKE_CLAUDE === 'garbage') console.log('not json');
+if (process.env.FAKE_CLAUDE === 'hang') setInterval(() => {}, 1000);
+`,
+    { mode: 0o755 },
+  );
+  const before = { PATH: process.env.PATH, FAKE_CLAUDE: process.env.FAKE_CLAUDE };
+  process.env.PATH = `${dir}${path.delimiter}${process.env.PATH}`;
+  t.after(() => {
+    process.env.PATH = before.PATH;
+    if (before.FAKE_CLAUDE === undefined) delete process.env.FAKE_CLAUDE;
+    else process.env.FAKE_CLAUDE = before.FAKE_CLAUDE;
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+  return { pid: () => Number(fs.readFileSync(path.join(dir, 'pid'), 'utf8')) };
+}
+
+const opts = { system: 's', prompt: 'p', schema: {} };
+const skip = process.platform === 'win32'; // 가짜 claude가 shebang 스크립트라 Windows에서는 건너뛴다
+
+test('runClaude: 출력이 JSON이 아니면 reject한다 (멈추지 않는다)', { skip }, async (t) => {
+  fakeClaude(t);
+  process.env.FAKE_CLAUDE = 'garbage';
+  await assert.rejects(runClaude(opts), /JSON/);
+});
+
+test('runClaude: 제한 시간 안에 안 끝나면 프로세스를 죽이고 reject한다', { skip }, async (t) => {
+  const fake = fakeClaude(t);
+  process.env.FAKE_CLAUDE = 'hang';
+  await assert.rejects(runClaude({ ...opts, timeoutMs: 500 }), /제한 시간/);
+  assert.throws(() => process.kill(fake.pid(), 0), { code: 'ESRCH' });
+});

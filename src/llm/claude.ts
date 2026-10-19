@@ -25,7 +25,11 @@ export type ClaudeOptions = {
   prompt: string;
   schema: object;
   llm?: Partial<Llm>;
+  timeoutMs?: number; // 이 시간 안에 안 끝나면 claude를 죽이고 실패로 본다
 };
+
+// 판단·초안·요약은 보통 20~40초. claude가 멈춰도 프로세스(수백 MB)와 대화 처리 상태가 영원히 남지 않게 끊는다
+const TIMEOUT_MS = 5 * 60_000;
 
 // 없는 필드는 null로 둔다(DB에도 NULL로 저장)
 export type Usage = {
@@ -94,14 +98,29 @@ export function runClaude<T>(opts: ClaudeOptions): Promise<ClaudeResult<T>> {
     child.stdout.setEncoding('utf8').on('data', (d: string) => (stdout += d));
     child.stderr.setEncoding('utf8').on('data', (d: string) => (stderr += d));
     const cleanup = () => fs.rmSync(dir, { recursive: true, force: true });
+    const timeoutMs = opts.timeoutMs ?? TIMEOUT_MS;
+    let timedOut = false;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      child.kill('SIGKILL');
+    }, timeoutMs);
     child.on('error', (err: NodeJS.ErrnoException) => {
+      clearTimeout(timer);
       cleanup();
       reject(err.code === 'ENOENT' ? new Error(CLAUDE_MISSING) : err);
     });
     child.on('close', (code) => {
+      clearTimeout(timer);
       cleanup();
+      if (timedOut) return reject(new Error(`claude가 제한 시간(${timeoutMs / 1000}초) 안에 끝나지 않아 중단했습니다`));
       if (code !== 0) return reject(new Error(`claude 종료 코드 ${code}: ${stderr.trim()}`));
-      const res = JSON.parse(stdout);
+      // 여기서 던지면 Promise가 끝나지 않고 그 대화는 앱을 다시 켤 때까지 "판단 중"에 묶인다
+      let res;
+      try {
+        res = JSON.parse(stdout);
+      } catch {
+        return reject(new Error(`claude 출력이 JSON이 아닙니다: ${stdout.trim().slice(0, 200)}`));
+      }
       if (res.is_error || res.structured_output == null) {
         return reject(new Error(`claude 오류 (${res.subtype ?? res.terminal_reason}): ${res.result ?? ''}`));
       }

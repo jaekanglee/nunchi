@@ -62,10 +62,12 @@ async function boot() {
     const messages = await e.read(w.channel, w.root_ts);
     e.remember(key, messages, w.root_ts === null);
     const summary = store.latestSummary(key);
+    // 화면에 보이는 가장 오래된 메시지보다 오래된 초안 기록은 보내지 않는다. 스레드 본문은 긴 스레드에서도 늘 맨 앞에 붙으므로 기준에서 뺀다
+    const oldestShown = messages.find((m) => m.ts !== w.root_ts)?.ts ?? null;
     return {
       me: myUserId,
       messages: messages.map((m) => ({ ...m, parts: toParts(m.text) })),
-      drafts: store.listDraftsByKey(key),
+      drafts: store.listDraftsByKey(key, oldestShown),
       summary: summary && { ...JSON.parse(summary.body), basis_ts: summary.basis_ts, created_at: summary.created_at },
     };
   });

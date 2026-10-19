@@ -724,13 +724,23 @@
       }, avatar(w.channel_name?.startsWith('#') ? w.channel_name.slice(1) : people[0] ?? w.title), body);
     }
 
-    // Slack 메시지와 Slmmury 기록을 시간순으로 합친다
-    async function renderDetail() {
+    // 열린 대화를 Slack에서 다시 읽는 건 그 대화가 바뀌었을 때만. state:changed는 다른 대화·타이머 때문에도 자주 온다
+    let convCache = { key: null, sig: '', conv: null };
+    const convSig = (key) => JSON.stringify([state.watches.find((w) => w.key === key), state.openDrafts.filter((d) => d.key === key)]);
+
+    // Slack 메시지와 Slmmury 기록을 시간순으로 합친다. refetch: 바뀐 게 없어도 다시 읽는다 (대화를 눌렀을 때)
+    async function renderDetail(refetch = false) {
       if (!selected) return;
-      $('detailTitle').textContent = titleOf(selected);
-      let conv;
-      try { conv = await api.getConversation(selected); }
-      catch (err) { $('detail').className = 'card empty'; $('detail').replaceChildren(String(err.message ?? err)); return; }
+      const key = selected;
+      $('detailTitle').textContent = titleOf(key);
+      const sig = convSig(key);
+      let conv = !refetch && convCache.key === key && convCache.sig === sig ? convCache.conv : null;
+      if (!conv) {
+        try { conv = await api.getConversation(key); }
+        catch (err) { if (key === selected) { $('detail').className = 'card empty'; $('detail').replaceChildren(String(err.message ?? err)); } return; }
+        if (key !== selected) return; // 읽는 사이 다른 대화를 골랐다
+        convCache = { key, sig, conv };
+      }
       const sentTs = new Set(conv.drafts.map((d) => d.sent_ts).filter(Boolean));
       const items = [
         ...conv.messages.map((m) => ({ t: Number(m.ts) * 1000, node: el('div', { className: `msg ${m.user === conv.me ? 'mine' : ''}` },
@@ -850,7 +860,7 @@
       $('watches').replaceChildren(...state.watches.map(watchRow));
       if (state.openDrafts.length) $('inbox').replaceChildren(...state.openDrafts.map(inboxRow));
       renderDetailLlm();
-      renderDetail();
+      renderDetail(true);
     }
 
     function renderTop() {
@@ -860,7 +870,17 @@
       $('statusPill').classList.toggle('paused', state.settings.paused === 'on');
     }
 
+    // state:changed가 몰려 와도 한 번에 하나씩만 그린다. 그리는 동안 온 알림은 끝난 뒤 한 번으로 합친다
+    let refreshing = false;
+    let refreshAgain = false;
     async function refresh() {
+      if (refreshing) { refreshAgain = true; return; }
+      refreshing = true;
+      try { do { refreshAgain = false; await refreshNow(); } while (refreshAgain); }
+      finally { refreshing = false; }
+    }
+
+    async function refreshNow() {
       state = await api.getState();
       renderTop();
       options($('model'), state.models, MODEL_LABEL, state.settings.model);
@@ -884,8 +904,8 @@
       $('inbox').replaceChildren(...(state.openDrafts.length ? state.openDrafts.map(inboxRow) : [el('div', { className: 'card empty', style: 'padding:10px', textContent: '처리할 초안이 없습니다 🎉' })]));
       $('watches').replaceChildren(...state.watches.map(watchRow));
       tick();
-      renderDetail();
       if (!$('archive').hidden) renderArchive();
+      await renderDetail();
     }
 
     makeResizer($('sideDivider'), '--side-w', 340, 240, (x) => x, () => Math.min(560, window.innerWidth - 520));

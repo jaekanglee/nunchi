@@ -69,6 +69,7 @@ export async function analyzePersona(log: (line: string) => void = console.log) 
     prompt: body,
     schema: SCHEMA,
     llm: { effort: 'high' }, // 한 번 돌려서 계속 쓰는 결과라 깊게
+    timeoutMs: 15 * 60_000, // 메시지 1000개를 high로 분석해 기본 제한(5분)보다 오래 걸릴 수 있다
   });
 
   fs.writeFileSync(path.join(DIR, 'style_guide.md'), result.style_guide);
