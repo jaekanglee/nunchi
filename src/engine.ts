@@ -11,7 +11,7 @@ import { editMark, planSummary, summarizeConversation } from './summary/summariz
 import type { ThreadMessage } from './responder/prompt.js';
 import type { CostFields, Store } from './store/db.js';
 import { resolveLlm, type Llm, type Usage } from './llm/claude.js';
-import { SETTINGS, parseGroups, thresholdsFrom } from './ctl/settings.js';
+import { SETTINGS, parseDirs, parseGroups, thresholdsFrom } from './ctl/settings.js';
 
 const SUMMARY_KEEP = 300; // 요약은 긴 스레드도 최근 300개까지 읽는다
 const LLM_CONCURRENCY = 2; // claude -p 하나가 수백 MB를 쓴다 (실측 약 260MB). 여러 대화가 한꺼번에 와도 이만큼만 띄운다
@@ -331,14 +331,17 @@ export function createEngine(deps: EngineDeps) {
   }
 
   // 화면의 "답장 초안 만들기": 차례 판단 없이 초안을 쓰고, 자동 전송 없이 항상 승인 대기로 둔다
-  async function requestDraftNow(key: string, hint: string) {
+  // withCode: "코드 보고 다시 쓰기". 설정한 프로젝트 폴더의 코드를 읽고 쓴다
+  async function requestDraftNow(key: string, hint: string, withCode: boolean) {
     const w = store.getWatch(key);
     if (!w) throw new Error('감시 중인 대화가 아닙니다');
+    const dirs = withCode ? parseDirs(setting('projectDirs')) : undefined;
+    if (dirs?.length === 0) throw new Error('설정에서 프로젝트 폴더를 먼저 추가하세요');
     const thread = await read(w.channel, w.root_ts);
     remember(key, thread, w.root_ts === null);
     const last = thread.at(-1);
     if (!last) throw new Error('대화에 메시지가 없습니다');
-    const drafted = await draft(thread, deps.persona, myUserId, llmFor(key, 'draft'), hint, myScope());
+    const drafted = await draft(thread, deps.persona, myUserId, llmFor(key, 'draft'), hint, myScope(), dirs);
     const result = drafted.output;
     if (!result.reply) throw new Error('초안을 만들지 못했습니다');
     const t = thresholds();
@@ -348,7 +351,7 @@ export function createEngine(deps: EngineDeps) {
       key, channel: w.channel, root_ts: w.root_ts, basis_ts: last.ts,
       category: result.category, risk: result.risk, confidence: result.confidence, reason: result.reason,
       draft_text: result.reply, status: decision === 'escalate' ? 'escalated' : 'pending',
-      hold_reason: ['직접 요청한 초안', ...holdReasons(result, 'draft', t).filter((r) => r !== '전송 설정이 초안 모드')].join(' · '),
+      hold_reason: [withCode ? '코드 보고 쓴 초안' : '직접 요청한 초안', ...holdReasons(result, 'draft', t).filter((r) => r !== '전송 설정이 초안 모드')].join(' · '),
       ...costFields(drafted),
     });
   }
@@ -428,8 +431,8 @@ export function createEngine(deps: EngineDeps) {
     summarize,
     summarizeStale,
 
-    requestDraft(key: string, hint: string) {
-      return track(drafting, key, () => requestDraftNow(key, hint));
+    requestDraft(key: string, hint: string, withCode = false) {
+      return track(drafting, key, () => requestDraftNow(key, hint, withCode));
     },
     read,
     remember,

@@ -110,6 +110,15 @@ App-Level Token(`xapp-`)에는 `connections:write`가 필요하고, 앱은 Socke
 - **상단 바**: 자동 감지, 전송 방식, 전체 일시정지를 바로 바꿉니다. 링크 입력칸도 여기 있습니다.
 - **앱 아이콘 뱃지**: 직접 확인과 승인 대기 대화 수를 보여줍니다. macOS 독과 Linux는 숫자, Windows는 빨간 점입니다.
 
+### 코드 보고 다시 쓰기
+
+"확인해보고 말씀드릴게요"로 보류된 초안이 프로젝트 코드로 답할 수 있는 질문이면, 초안 카드의 **🔎 코드 보고 다시 쓰기**를 누릅니다. 설정의 **프로젝트 폴더**에 추가한 폴더에서 코드를 찾아 읽고 답장을 다시 씁니다.
+
+- 답장에는 코드나 파일 경로를 넣지 않습니다. 근거(`파일:줄`)와 브랜치는 초안의 판단 이유에 남습니다.
+- 지금 체크아웃된 브랜치를 읽습니다. 질문 대상(배포 버전 등)과 브랜치가 다르면 답이 틀릴 수 있으니 판단 이유의 브랜치를 보고 보내세요.
+- 이렇게 쓴 초안은 자동 전송하지 않고 승인 대기나 직접 확인으로 둡니다.
+- 일반 초안보다 오래 걸리고(레포 크기에 따라 수십 초~몇 분) 비용도 더 듭니다. 자동으로 돌지 않고 버튼을 누를 때만 실행합니다.
+
 ### 대화 목록 우클릭 메뉴
 
 | 항목 | 동작 |
@@ -256,7 +265,7 @@ Slack ──Socket Mode──▶ gateway ──▶ engine ──▶ store (SQLit
 
 | 영역 | 채널 |
 |---|---|
-| 상태·설정 | `state:get`, `settings:set`, `state:changed`(main → 렌더러) |
+| 상태·설정 | `state:get`, `settings:set`, `dialog:pickFolders`, `state:changed`(main → 렌더러) |
 | 대화 | `watch:setMode`, `watch:setLlm`, `conversation:get`, `watch:contextMenu`, `watch:openSlack` |
 | 초안·전송 | `draft:request`, `draft:send`, `draft:ignore`, `message:reply` |
 | 요약 | `summary:run`, `summary:runStale` |
@@ -305,6 +314,7 @@ SQLite 한 파일(`nunchi.db`)에 아래 테이블이 있습니다. 이전 버�
 | `escalateRisk` | `60` | 1~100 | 위험이 이 값 이상이면 직접 확인 |
 | `mentionGroups` | `none` | `S…` ID 쉼표 구분 / none | 반응할 그룹 멘션 |
 | `adUrl` | `none` | `https://…` / none | 사이드바 하단 배너 |
+| `projectDirs` | `none` | 절대 경로, 줄바꿈 구분 / none | '코드 보고 다시 쓰기'가 읽을 프로젝트 폴더 |
 
 **위험과 확신 기준**: 초안마다 모델이 위험(확인 없이 보냈을 때 문제가 될 가능성, 0~100)과 확신(내 말투·의도에 맞을 가능성, 0~100%)을 매깁니다. 두 점수는 합치거나 곱하지 않고 각자 기준과 비교합니다. 위험 기준 두 개(`autoMaxRisk`, `escalateRisk`)가 위험 점수를 세 구간으로 나눕니다. 기본값이면 위험 0~19는 자동 전송, 20~59는 승인 대기, 60 이상은 직접 확인입니다. 확신(`autoMinConfidence`)은 자동 전송 구간에만 붙는 조건이라, 위험이 낮아도 확신이 모자라면 승인 대기로 갑니다. 설정 화면은 지금 값으로 이 구간을 풀어서 보여줍니다.
 
@@ -373,6 +383,7 @@ nunchi drafts           # 처리 필요 초안 본문
 
 - **토큰 저장**: Electron `safeStorage`로 암호화합니다(macOS 키체인, Windows DPAPI, Linux 키링). 키링이 없으면 권한 600 파일에 평문으로 저장하고 화면에 경고합니다.
 - **LLM 호출 격리**: `claude -p`를 `--tools ''`, `--strict-mcp-config`, `--setting-sources ''`, `--no-session-persistence`로 실행합니다. 프롬프트에서 Slack 데이터는 태그로 감싸고 그 안의 지시는 따르지 않게 합니다.
+- **코드 읽기 범위**: '코드 보고 다시 쓰기'만 예외로 `Read`·`Grep`·`Glob`을 켭니다. `--add-dir`로 등록한 폴더만 열고, 임시 폴더에서 실행해 앱 폴더(.env에 토큰)는 읽지 못하게 합니다. `.env*`, `*.pem`, `*.key`, `*.p8`, `*.p12`, `*.jks`, `*.keystore`, SSH 키, `local.properties`, `.git/config`는 읽기를 막습니다(Grep 결과에서도 빠집니다). 쓰기·셸 도구는 켜지 않습니다.
 - **말투 학습 범위**: 공개 채널의 내 메시지만 씁니다. DM과 비공개 채널은 학습에 쓰지 않습니다.
 - **루프 방지**: 내 메시지와 봇 메시지는 새 처리 대상에서 제외합니다.
 - **전송 직전 재확인**: 자동 전송 전에 스레드가 바뀌었으면 보내지 않습니다.

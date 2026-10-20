@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { SETTINGS, parseGroups, thresholdsFrom, validateSetting } from './settings.js';
+import { SETTINGS, parseDirs, parseGroups, thresholdsFrom, validateSetting } from './settings.js';
 import { DEFAULT_THRESHOLDS } from '../responder/policy.js';
 
 test('허용된 키·값만 통과', () => {
@@ -37,4 +37,16 @@ test('자동 전송 기준 설정', () => {
   assert.match(validateSetting('escalateRisk', '0')!, /1~100/);
   const get = (k: string) => SETTINGS[k].fallback;
   assert.deepEqual(thresholdsFrom(get), DEFAULT_THRESHOLDS);
+});
+
+test('프로젝트 폴더: 줄마다 절대 경로 하나, 없으면 none', () => {
+  assert.equal(validateSetting('projectDirs', 'none'), null);
+  assert.equal(validateSetting('projectDirs', '/Users/me/rider-app'), null);
+  assert.equal(validateSetting('projectDirs', '/Users/me/rider app\n/Users/me/server'), null);
+  assert.equal(validateSetting('projectDirs', 'C:\\work\\rider-app'), null);
+  assert.match(validateSetting('projectDirs', 'rider-app')!, /쓸 수 없는 값/);
+  assert.match(validateSetting('projectDirs', '/a\n\n/b')!, /쓸 수 없는 값/);
+  assert.match(validateSetting('projectDirs', '')!, /쓸 수 없는 값/);
+  assert.deepEqual(parseDirs('/a\n/b c'), ['/a', '/b c']);
+  assert.deepEqual(parseDirs('none'), []);
 });

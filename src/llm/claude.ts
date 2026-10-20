@@ -26,10 +26,15 @@ export type ClaudeOptions = {
   schema: object;
   llm?: Partial<Llm>;
   timeoutMs?: number; // 이 시간 안에 안 끝나면 claude를 죽이고 실패로 본다
+  dirs?: string[]; // 코드를 읽을 프로젝트 폴더. 주면 이 폴더만 읽기 도구로 연다
 };
 
 // 판단·초안·요약은 보통 20~40초. claude가 멈춰도 프로세스(수백 MB)와 대화 처리 상태가 영원히 남지 않게 끊는다
 const TIMEOUT_MS = 5 * 60_000;
+
+// 코드를 읽을 때도 비밀값이 들어 있기 쉬운 파일은 막는다. //는 절대 경로 기준이라 어느 폴더에 있든 걸린다.
+// 실측: Read는 거부되고 Grep 결과에서도 빠진다
+const SECRET_FILES = ['.env*', '*.pem', '*.key', '*.p8', '*.p12', '*.jks', '*.keystore', 'id_rsa*', 'id_ed25519*', 'local.properties', '.git/config'];
 
 // 없는 필드는 null로 둔다(DB에도 NULL로 저장)
 export type Usage = {
@@ -76,6 +81,11 @@ export function runClaude<T>(opts: ClaudeOptions): Promise<ClaudeResult<T>> {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'nunchi-'));
   const systemFile = path.join(dir, 'system.txt');
   fs.writeFileSync(systemFile, opts.system);
+  // Slack 메시지는 남이 쓴 입력이다. 프롬프트 인젝션에 대비해 도구를 끈다.
+  // 프로젝트 폴더를 주면 그 폴더만 읽기 도구로 연다 (등록하지 않은 폴더는 권한이 없어 거부된다)
+  const tools = opts.dirs?.length
+    ? ['--tools', 'Read,Grep,Glob', '--add-dir', ...opts.dirs, '--disallowedTools', ...SECRET_FILES.map((g) => `Read(//**/${g})`)]
+    : ['--tools', ''];
   const args = [
     '-p',
     '--model', opts.llm?.model ?? DEFAULT_LLM.model,
@@ -83,15 +93,16 @@ export function runClaude<T>(opts: ClaudeOptions): Promise<ClaudeResult<T>> {
     '--output-format', 'json',
     '--json-schema', JSON.stringify(opts.schema),
     '--system-prompt-file', systemFile,
-    // Slack 메시지는 남이 쓴 입력이다. 프롬프트 인젝션에 대비해 도구·MCP·사용자 설정(hook, 플러그인)을 전부 끈다
-    '--tools', '',
+    ...tools,
+    // MCP·사용자 설정(hook, 플러그인)도 전부 끈다
     '--strict-mcp-config',
     '--setting-sources', '',
     '--no-session-persistence',
   ];
 
   return new Promise((resolve, reject) => {
-    const child = spawn('claude', args, { stdio: ['pipe', 'pipe', 'pipe'] });
+    // 작업 폴더도 읽을 수 있어서, 도구를 열 때는 앱 폴더(.env에 Slack 토큰) 대신 system.txt만 든 임시 폴더에서 띄운다
+    const child = spawn('claude', args, { cwd: opts.dirs?.length ? dir : undefined, stdio: ['pipe', 'pipe', 'pipe'] });
     let stdout = '';
     let stderr = '';
     // 한글이 청크 경계에서 잘려도 깨지지 않게 디코더를 스트림에 맡긴다

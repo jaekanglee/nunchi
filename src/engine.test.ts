@@ -169,3 +169,49 @@ test('LLM 호출은 대화 여러 개가 한꺼번에 와도 종류와 상관없
   await Promise.all([engine.summarize(keys[0]), engine.summarize(keys[1]), engine.requestDraft(keys[2], ''), engine.requestDraft(keys[3], '')]);
   assert.equal(max, 2);
 });
+
+function codeSetup() {
+  const store = openStore(':memory:');
+  const seen: (string[] | undefined)[] = [];
+  const client = { search: { messages: async () => ({ messages: { matches: [] } }) } } as unknown as WebClient;
+  const engine = createEngine({
+    client,
+    myUserId: 'UME',
+    store,
+    readConversation: { read: async () => [msg('1700000000.000100')], nameOf: async (u: string) => u },
+    persona: { styleGuide: 'S', relationships: [], pairs: [] },
+    notify: () => {},
+    onChange: () => {},
+    draft: async (_t, _p, _me, _llm, _req, _scope, dirs): Promise<ClaudeResult<DraftResult>> => {
+      seen.push(dirs);
+      return { output: { needs_my_reply: true, category: '단순확인·리액션', risk: 5, needs_facts_i_dont_know: false, confidence: 0.9, reply: '네', reason: 'src/push.ts:3', topic: 't' }, costUsd: 0, usage };
+    },
+  });
+  store.addWatch(KEY, 'C1', '1700000000.000100', 'link');
+  store.setSetting('sendMode', 'auto');
+  return { store, engine, seen };
+}
+
+test('코드 보고 다시 쓰기: 등록한 폴더를 넘기고, 자동 전송 조건이어도 승인 대기에 둔다', async () => {
+  const { store, engine, seen } = codeSetup();
+  store.setSetting('projectDirs', '/work/rider-app\n/work/server');
+  await engine.requestDraft(KEY, '', true);
+  assert.deepEqual(seen, [['/work/rider-app', '/work/server']]);
+  const d = store.listDraftsByKey(KEY)[0];
+  assert.equal(d.status, 'pending');
+  assert.match(d.hold_reason!, /^코드 보고 쓴 초안/);
+});
+
+test('코드 보고 다시 쓰기: 폴더가 없으면 LLM을 부르지 않고 알려준다', async () => {
+  const { store, engine, seen } = codeSetup();
+  await assert.rejects(engine.requestDraft(KEY, '', true), /프로젝트 폴더/);
+  assert.equal(seen.length, 0);
+  assert.equal(store.listDraftsByKey(KEY).length, 0);
+});
+
+test('일반 초안 요청은 폴더를 넘기지 않는다', async () => {
+  const { store, engine, seen } = codeSetup();
+  store.setSetting('projectDirs', '/work/rider-app');
+  await engine.requestDraft(KEY, '');
+  assert.deepEqual(seen, [undefined]);
+});

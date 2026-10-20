@@ -50,6 +50,10 @@ const fs = require('node:fs');
 fs.writeFileSync(${JSON.stringify(path.join(dir, 'pid'))}, String(process.pid));
 if (process.env.FAKE_CLAUDE === 'garbage') console.log('not json');
 if (process.env.FAKE_CLAUDE === 'hang') setInterval(() => {}, 1000);
+if (process.env.FAKE_CLAUDE === 'args') {
+  fs.writeFileSync(${JSON.stringify(path.join(dir, 'args.json'))}, JSON.stringify({ argv: process.argv.slice(2), cwd: process.cwd() }));
+  console.log(JSON.stringify({ structured_output: {}, total_cost_usd: 0 }));
+}
 `,
     { mode: 0o755 },
   );
@@ -61,7 +65,10 @@ if (process.env.FAKE_CLAUDE === 'hang') setInterval(() => {}, 1000);
     else process.env.FAKE_CLAUDE = before.FAKE_CLAUDE;
     fs.rmSync(dir, { recursive: true, force: true });
   });
-  return { pid: () => Number(fs.readFileSync(path.join(dir, 'pid'), 'utf8')) };
+  return {
+    pid: () => Number(fs.readFileSync(path.join(dir, 'pid'), 'utf8')),
+    call: () => JSON.parse(fs.readFileSync(path.join(dir, 'args.json'), 'utf8')) as { argv: string[]; cwd: string },
+  };
 }
 
 const opts = { system: 's', prompt: 'p', schema: {} };
@@ -78,4 +85,29 @@ test('runClaude: 제한 시간 안에 안 끝나면 프로세스를 죽이고 re
   process.env.FAKE_CLAUDE = 'hang';
   await assert.rejects(runClaude({ ...opts, timeoutMs: 500 }), /제한 시간/);
   assert.throws(() => process.kill(fake.pid(), 0), { code: 'ESRCH' });
+});
+
+const after = (argv: string[], flag: string) => argv[argv.indexOf(flag) + 1];
+
+test('runClaude: 폴더를 주지 않으면 도구를 모두 끈다', { skip }, async (t) => {
+  const fake = fakeClaude(t);
+  process.env.FAKE_CLAUDE = 'args';
+  await runClaude(opts);
+  const { argv } = fake.call();
+  assert.equal(after(argv, '--tools'), '');
+  assert.equal(argv.includes('--add-dir'), false);
+});
+
+test('runClaude: 폴더를 주면 그 폴더만 읽기 도구로 열고 비밀 파일은 막는다', { skip }, async (t) => {
+  const fake = fakeClaude(t);
+  process.env.FAKE_CLAUDE = 'args';
+  await runClaude({ ...opts, dirs: ['/work/rider-app', '/work/my server'] });
+  const { argv, cwd } = fake.call();
+  assert.equal(after(argv, '--tools'), 'Read,Grep,Glob');
+  assert.deepEqual(argv.slice(argv.indexOf('--add-dir') + 1, argv.indexOf('--add-dir') + 3), ['/work/rider-app', '/work/my server']);
+  assert.ok(argv.includes('Read(//**/.env*)'));
+  assert.ok(argv.includes('Read(//**/.git/config)'));
+  // 작업 폴더도 읽을 수 있어서 앱 폴더(.env에 Slack 토큰)가 아닌 빈 임시 폴더에서 띄운다
+  assert.notEqual(cwd, process.cwd());
+  assert.match(path.basename(cwd), /^nunchi-/); // runClaude가 만들고 끝나면 지우는 임시 폴더
 });

@@ -120,7 +120,12 @@ async function boot() {
     });
     if (response === 0) ready().forget(key);
   });
-  ipcMain.handle('draft:request', (_ev, key: string, hint: string) => ready().requestDraft(key, hint));
+  ipcMain.handle('draft:request', (_ev, key: string, hint: string, withCode: boolean) => ready().requestDraft(key, hint, withCode));
+  // 설정의 "폴더 추가". 취소하면 빈 배열
+  ipcMain.handle('dialog:pickFolders', async () => {
+    const r = await dialog.showOpenDialog(win, { properties: ['openDirectory', 'multiSelections'] });
+    return r.canceled ? [] : r.filePaths;
+  });
   ipcMain.handle('watch:openSlack', (_ev, key: string) => {
     const w = store.getWatch(key);
     if (w && teamId) return shell.openExternal(buildDeepLink(teamId, w.channel, w.root_ts));

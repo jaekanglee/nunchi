@@ -33,6 +33,7 @@ export const SETTINGS: Record<string, SettingDef> = {
   adUrl: { pattern: /^(none|https:\/\/\S+)$/, fallback: 'none', desc: '사이드바 하단 광고 배너로 띄울 https 페이지 (없으면 none)' },
   mentionGroups: { pattern: /^(none|S[A-Z0-9]+(,S[A-Z0-9]+)*)$/, fallback: 'none', desc: '반응할 그룹 멘션 (S로 시작하는 ID, 쉼표 구분, 없으면 none)' },
   myScope: { pattern: /^\S.{0,299}$/, fallback: 'none', desc: '내 담당 업무 덮어쓰기. none이면 말투 분석이 뽑은 값을 쓴다 (판단·초안에서 내 담당과 무관한 대화를 거름, 한 줄 300자 이내)' },
+  projectDirs: { pattern: /^(none|(\/|[A-Za-z]:\\)[^\n]*(\n(\/|[A-Za-z]:\\)[^\n]*)*)$/, fallback: 'none', desc: "'코드 보고 다시 쓰기'가 읽을 프로젝트 폴더 (절대 경로, 줄바꿈으로 여러 개, 없으면 none)" },
 };
 
 export function parseList(value: string): string[] {
@@ -49,6 +50,11 @@ export function thresholdsFrom(get: (key: string) => string): Thresholds {
 }
 
 export const parseGroups = parseList;
+
+// 폴더 경로에는 쉼표가 들어갈 수 있어 줄바꿈으로 나눈다
+export function parseDirs(value: string): string[] {
+  return value === 'none' ? [] : value.split('\n');
+}
 
 export function validateSetting(key: string, value: string): string | null {
   const def = SETTINGS[key];
