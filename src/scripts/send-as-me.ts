@@ -10,7 +10,7 @@ async function main() {
 
   const auth = await client.auth.test();
   const channel = process.argv[2] ?? (auth.user_id as string);
-  const text = process.argv[3] ?? 'Slmmury 전송 테스트';
+  const text = process.argv[3] ?? '눈치 전송 테스트';
 
   const res = await client.chat.postMessage({ channel, text });
   console.log('보낸 채널:', res.channel, 'ts:', res.ts);

@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron';
 
-contextBridge.exposeInMainWorld('slmmury', {
+contextBridge.exposeInMainWorld('nunchi', {
   platform: process.platform,
   getState: () => ipcRenderer.invoke('state:get'),
   setSetting: (key: string, value: string) => ipcRenderer.invoke('settings:set', key, value),

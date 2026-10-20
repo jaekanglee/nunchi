@@ -9,7 +9,7 @@ import { createEngine } from './engine.js';
 import { EFFORTS, MODELS } from './llm/claude.js';
 import { SETTINGS, parseGroups, validateSetting } from './ctl/settings.js';
 import { AUTO_ELIGIBLE } from './responder/policy.js';
-import { DB_PATH } from './paths.js';
+import { DB_PATH, migrateLegacyData } from './paths.js';
 import { checkClaude, loadTokens, saveTokens, verifyTokens, type Tokens } from './setup.js';
 import { collectPersona } from './persona/collect.js';
 import { analyzePersona } from './persona/analyze.js';
@@ -19,6 +19,7 @@ import { buildDeepLink, buildPermalink } from './slack/permalink.js';
 import { SCOPES, buildManifest, createAppUrl, toYaml, type ManifestOptions } from './slack/manifest.js';
 
 async function boot() {
+  migrateLegacyData(); // 이름이 slmmury이던 때의 데이터 폴더를 옮긴다. DB를 열기 전에
   const store = openStore(DB_PATH);
 
   // 화면이 뜨자마자 상태를 요청하므로 IPC 핸들러를 먼저 등록한다
@@ -280,7 +281,7 @@ if (process.platform === 'win32') app.setAppUserModelId(process.execPath);
 
 // 두 번 실행되면 같은 메시지에 자동 전송도 두 번 나간다. 이미 떠 있으면 그 창을 앞으로 가져오고 끝낸다
 if (!app.requestSingleInstanceLock()) {
-  console.log('Slmmury가 이미 실행 중입니다');
+  console.log('눈치가 이미 실행 중입니다');
   app.quit();
 } else {
   app.on('second-instance', () => {

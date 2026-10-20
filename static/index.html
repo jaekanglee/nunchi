@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self'; frame-src https:" />
-  <title>Slmmury</title>
+  <title>Nunchi</title>
   <style>
     :root {
       --bg: #f6f5fb; --panel: #ffffff; --panel-2: #f1effa; --line: #e7e4f2;
@@ -276,7 +276,7 @@
 </head>
 <body>
   <header class="topbar">
-    <div class="brand"><img src="../assets/icon.png" alt="" />Slmmury</div>
+    <div class="brand"><img src="../assets/icon.png" alt="" />Nunchi</div>
     <label class="status" id="statusPill"><select id="paused"><option value="off">실행 중</option><option value="on">일시정지</option></select></label>
     <label class="ctl">감지 <select id="autoDetect"><option value="on">멘션·DM 자동</option><option value="off">링크만</option></select></label>
     <label class="ctl">전송 <select id="sendMode"><option value="draft">초안만</option><option value="auto">자동</option></select></label>
@@ -370,7 +370,7 @@
       <div class="card step">
         <h3>광고 배너</h3>
         <div class="hint">사이드바 맨 아래에 띄울 광고 페이지 주소(https)입니다. 광고 페이지는 앱과 분리된 창(iframe)에서 열려 Slack 토큰이나 메시지에 접근할 수 없고, 광고를 누르면 기본 브라우저로 열립니다. 비우면 배너를 숨깁니다.</div>
-        <div class="srow"><div><b>광고 페이지 주소</b><small>예: https://내도메인/slmmury-ad.html</small></div><input id="adUrl" class="input" placeholder="https://…" style="width:280px" /></div>
+        <div class="srow"><div><b>광고 페이지 주소</b><small>예: https://내도메인/nunchi-ad.html</small></div><input id="adUrl" class="input" placeholder="https://…" style="width:280px" /></div>
       </div>
 
       <div class="card step">
@@ -389,7 +389,7 @@
 
   <div id="setup" hidden>
     <div class="wrap">
-      <div class="hero"><img src="../assets/icon.png" alt="" /><h1>Slmmury 시작하기</h1><div class="hint">내 Slack 계정으로 메시지를 받아 내 말투로 답장 초안을 씁니다</div></div>
+      <div class="hero"><img src="../assets/icon.png" alt="" /><h1>Nunchi 시작하기</h1><div class="hint">내 Slack 계정으로 메시지를 받아 내 말투로 답장 초안을 씁니다</div></div>
 
       <div class="card step" id="stepClaude">
         <h3><span class="num"><span>1</span></span>Claude Code 로그인</h3>
@@ -443,7 +443,7 @@
         <h2>매니페스트 만들기</h2>
         <p>매니페스트는 Slack 앱의 이름·권한·설정을 담은 설계도입니다. 쓸 기능을 고르면 그에 맞는 권한만 넣어 만들어 드립니다.</p>
         <h4>앱 이름</h4>
-        <label class="field" style="display:block"><input id="mName" class="input" style="width:100%;border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:7px 10px;outline:none" maxlength="35" placeholder="예) Slmmury 민수" /></label>
+        <label class="field" style="display:block"><input id="mName" class="input" style="width:100%;border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:7px 10px;outline:none" maxlength="35" placeholder="예) Nunchi 민수" /></label>
         <p class="hint">워크스페이스에서 여러 명이 쓰면 이름 뒤에 본인 이름을 붙이면 구분하기 쉽습니다.</p>
         <h4>쓸 기능</h4>
         <div id="mOptions"></div>
@@ -460,7 +460,7 @@
 
       <div data-page="tutorial">
         <h2>연결 튜토리얼</h2>
-        <p>Slack 앱을 만들고 토큰 두 개를 받아 Slmmury에 넣는 과정입니다. 5분 정도 걸립니다.</p>
+        <p>Slack 앱을 만들고 토큰 두 개를 받아 눈치에 넣는 과정입니다. 5분 정도 걸립니다.</p>
         <div class="card tstep"><div class="n">1</div><div>
           <b class="t">앱 만들기</b>
           <ul>
@@ -493,7 +493,7 @@
           </ul>
         </div></div>
         <div class="card tstep"><div class="n">5</div><div>
-          <b class="t">Slmmury에 붙여넣기</b>
+          <b class="t">눈치에 붙여넣기</b>
           <ul>
             <li>설정 화면 2단계에 두 토큰을 넣고 <b>확인하고 저장</b>.</li>
             <li>토큰이 실제로 동작하는지, 필요한 권한이 다 붙었는지 바로 점검합니다.</li>
@@ -516,7 +516,7 @@
           <tr><td>Token Rotation</td><td>끄기</td><td>켜면 토큰이 12시간마다 만료돼 앱이 끊깁니다.</td></tr>
           <tr><td>Interactivity</td><td>끄기</td><td>버튼·모달을 쓰지 않습니다.</td></tr>
         </table>
-        <div class="note">User OAuth Token은 <b>내 Slack 계정 그 자체</b>입니다. 다른 사람에게 주거나 저장소에 올리지 마세요. Slmmury는 이 컴퓨터의 OS 보안 저장소로 암호화해 보관합니다.</div>
+        <div class="note">User OAuth Token은 <b>내 Slack 계정 그 자체</b>입니다. 다른 사람에게 주거나 저장소에 올리지 마세요. 눈치는 이 컴퓨터의 OS 보안 저장소로 암호화해 보관합니다.</div>
         <div class="note info">권한을 나중에 바꾸면(매니페스트 수정) <b>Install App → Reinstall</b>을 해야 새 권한이 토큰에 붙습니다. 토큰 값이 바뀌었다면 다시 저장하세요.</div>
       </div>
 
@@ -538,7 +538,7 @@
   </div>
 
   <script>
-    const api = window.slmmury;
+    const api = window.nunchi;
     document.body.classList.add(api.platform);
     const $ = (id) => document.getElementById(id);
     const el = (tag, props = {}, ...children) => { const e = Object.assign(document.createElement(tag), props); e.append(...children); return e; };
@@ -728,7 +728,7 @@
     let convCache = { key: null, sig: '', conv: null };
     const convSig = (key) => JSON.stringify([state.watches.find((w) => w.key === key), state.openDrafts.filter((d) => d.key === key)]);
 
-    // Slack 메시지와 Slmmury 기록을 시간순으로 합친다. refetch: 바뀐 게 없어도 다시 읽는다 (대화를 눌렀을 때)
+    // Slack 메시지와 눈치 기록을 시간순으로 합친다. refetch: 바뀐 게 없어도 다시 읽는다 (대화를 눌렀을 때)
     async function renderDetail(refetch = false) {
       if (!selected) return;
       const key = selected;
@@ -744,7 +744,7 @@
       const sentTs = new Set(conv.drafts.map((d) => d.sent_ts).filter(Boolean));
       const items = [
         ...conv.messages.map((m) => ({ t: Number(m.ts) * 1000, node: el('div', { className: `msg ${m.user === conv.me ? 'mine' : ''}` },
-          el('div', { className: 'who' }, el('b', { textContent: m.user === conv.me ? '나' : m.name }), `${sentTs.has(m.ts) ? 'Slmmury가 보냄 · ' : ''}${time(m.ts)}`),
+          el('div', { className: 'who' }, el('b', { textContent: m.user === conv.me ? '나' : m.name }), `${sentTs.has(m.ts) ? '눈치가 보냄 · ' : ''}${time(m.ts)}`),
           el('div', { className: 'text' }, ...m.parts.map(partNode))) })),
         ...conv.drafts.map((d) => ({ t: d.created_at, node: OPEN.includes(d.status) ? draftCard(d)
           : el('div', { className: 'event', textContent: `🤖 ${STATUS[d.status]} · ${d.category} · 위험 ${d.risk} — ${d.reason}${d.draft_text ? `\n초안: ${d.final_text ?? d.draft_text}` : ''}` }) })),
@@ -945,7 +945,7 @@
     $('openSettings').onclick = () => ($('settings').hidden = false);
     // 타이밍 설정: 값을 바꾸면 바로 저장. 범위를 벗어나면 토스트로 알리고 원래 값으로
     const TIMING = ['urgentDelaySec', 'batchDelaySec', 'autoSendMinSec', 'autoSendMaxSec', 'autoMaxRisk', 'autoMinConfidence', 'escalateRisk'];
-    // 광고는 sandbox iframe: 스크립트는 돌지만 앱 화면(window.slmmury)에는 닿지 못하고, 앱 창을 이동시킬 수 없다
+    // 광고는 sandbox iframe: 스크립트는 돌지만 앱 화면(window.nunchi)에는 닿지 못하고, 앱 창을 이동시킬 수 없다
     function renderAd(url) {
       const slot = $('adSlot');
       const cur = slot.querySelector('iframe');
@@ -1009,7 +1009,7 @@
       el('div', {}, el('b', { textContent: o.label }), el('small', { textContent: o.desc })))));
     $('mName').oninput = renderManifest;
     async function renderManifest() {
-      const opts = { appName: $('mName').value || 'Slmmury', ...Object.fromEntries(OPTIONS.map((o) => [o.key, $(`m_${o.key}`).checked])) };
+      const opts = { appName: $('mName').value || 'Nunchi', ...Object.fromEntries(OPTIONS.map((o) => [o.key, $(`m_${o.key}`).checked])) };
       manifest = await setup.manifest(opts);
       $('mYaml').textContent = manifest.yaml;
       $('mMsg').textContent = '';

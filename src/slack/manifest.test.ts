@@ -17,7 +17,7 @@ test('선택 기능을 끄면 해당 권한과 이벤트가 빠진다', () => {
 
 test('앱 이름은 35자로 자르고 비어 있으면 기본값', () => {
   assert.equal(buildManifest({ ...DEFAULT_OPTIONS, appName: 'a'.repeat(50) }).display_information.name.length, 35);
-  assert.equal(buildManifest({ ...DEFAULT_OPTIONS, appName: '  ' }).display_information.name, 'Slmmury');
+  assert.equal(buildManifest({ ...DEFAULT_OPTIONS, appName: '  ' }).display_information.name, 'Nunchi');
 });
 
 test('생성 링크는 JSON을 URL 인코딩해 담는다', () => {

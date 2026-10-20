@@ -1,4 +1,4 @@
-# Slmmury
+# Nunchi
 
 내 Slack 계정으로 들어온 메시지를 받아 **내 말투로 답장 초안**을 쓰고, 위험도에 따라 자동 전송 / 승인 대기 / 직접 확인으로 나누는 데스크톱 앱입니다. macOS · Windows · Linux에서 돌아갑니다. 대화 요약과 SSH 원격 제어도 됩니다.
 
@@ -16,7 +16,7 @@
 7. [소스 구조](#소스-구조)
 8. [데이터 모델](#데이터-모델)
 9. [설정 레퍼런스](#설정-레퍼런스)
-10. [slmmury 명령](#slmmury-명령)
+10. [nunchi 명령](#nunchi-명령)
 11. [데이터 위치](#데이터-위치)
 12. [보안과 안전장치](#보안과-안전장치)
 13. [한계와 주의](#한계와-주의)
@@ -49,11 +49,11 @@
 ## 설치와 첫 실행
 
 ```bash
-git clone <이 저장소> slmmury
-cd slmmury
+git clone <이 저장소> nunchi
+cd nunchi
 npm install
-npm link        # slmmury 명령 등록 (한 번만)
-slmmury start
+npm link        # nunchi 명령 등록 (한 번만)
+nunchi start
 ```
 
 처음 켜면 설정 화면이 뜹니다. 순서대로 따라 하면 됩니다.
@@ -93,7 +93,7 @@ App-Level Token(`xapp-`)에는 `connections:write`가 필요하고, 앱은 Socke
 ### 화면 구성
 
 - **사이드바**: 위에는 처리할 초안 목록(인박스), 아래에는 감시 중인 대화 목록이 있습니다. 대화마다 답 필요 여부 뱃지, 주제, 채널, 마지막 메시지, 요약 상태, 참여자, 판단 카운트다운이 보입니다.
-- **상세 영역**: 선택한 대화의 Slack 메시지와 Slmmury 기록(초안, 전송)을 시간순으로 보여줍니다. 요약, 초안 생성, 직접 답장, 대화별 모델·effort 설정이 여기 있습니다.
+- **상세 영역**: 선택한 대화의 Slack 메시지와 눈치 기록(초안, 전송)을 시간순으로 보여줍니다. 요약, 초안 생성, 직접 답장, 대화별 모델·effort 설정이 여기 있습니다.
 - **상단 바**: 자동 감지, 전송 방식, 전체 일시정지를 바로 바꿉니다. 링크 입력칸도 여기 있습니다.
 - **앱 아이콘 뱃지**: 직접 확인과 승인 대기 대화 수를 보여줍니다. macOS 독과 Linux는 숫자, Windows는 빨간 점입니다.
 
@@ -148,7 +148,7 @@ Slack ──Socket Mode──▶ gateway ──▶ engine ──▶ store (SQLit
 | 계층 | 역할 |
 |---|---|
 | Electron main (`main.ts`) | 창, 메뉴, IPC 핸들러 등록, 엔진 시작. 화면이 뜨자마자 상태를 요청하므로 IPC를 먼저 등록하고, 토큰과 말투 데이터가 준비되면 Slack에 연결합니다 |
-| preload (`preload.ts`) | `contextIsolation` 아래에서 렌더러에 `window.slmmury` API만 노출합니다 |
+| preload (`preload.ts`) | `contextIsolation` 아래에서 렌더러에 `window.nunchi` API만 노출합니다 |
 | 렌더러 (`static/index.html`) | 프레임워크 없는 단일 HTML. `state:changed` 이벤트를 받으면 상태를 다시 읽어 그립니다 |
 | gateway | Bolt Socket Mode 연결. `ignoreSelf: false`라서 내 메시지도 받습니다(내가 직접 답했는지 알아야 하므로) |
 | engine | 이벤트 → 감시 등록 → 디바운스 → 판단 → 초안 → 정책 결정 → 알림·자동 전송을 조율합니다 |
@@ -198,7 +198,7 @@ Slack ──Socket Mode──▶ gateway ──▶ engine ──▶ store (SQLit
 
 ```
 .
-├── bin/slmmury.js          명령줄 도구 (빌드 전에도 돌도록 순수 JS)
+├── bin/nunchi.js           명령줄 도구 (빌드 전에도 돌도록 순수 JS)
 ├── assets/                 앱 아이콘
 ├── docs/design.md          설계 문서
 ├── slack-manifest.yaml     기본 옵션의 Slack 앱 매니페스트
@@ -237,7 +237,7 @@ Slack ──Socket Mode──▶ gateway ──▶ engine ──▶ store (SQLit
 
 ### IPC 채널
 
-렌더러는 `window.slmmury`로만 main에 접근합니다.
+렌더러는 `window.nunchi`로만 main에 접근합니다.
 
 | 영역 | 채널 |
 |---|---|
@@ -251,7 +251,7 @@ Slack ──Socket Mode──▶ gateway ──▶ engine ──▶ store (SQLit
 
 ## 데이터 모델
 
-SQLite 한 파일(`slmmury.db`)에 아래 테이블이 있습니다. 이전 버전 DB는 시작할 때 컬럼을 자동으로 추가합니다.
+SQLite 한 파일(`nunchi.db`)에 아래 테이블이 있습니다. 이전 버전 DB는 시작할 때 컬럼을 자동으로 추가합니다.
 
 | 테이블 | 내용 |
 |---|---|
@@ -267,7 +267,7 @@ SQLite 한 파일(`slmmury.db`)에 아래 테이블이 있습니다. 이전 버�
 
 ## 설정 레퍼런스
 
-설정 화면과 `slmmury set`이 같은 정의(`src/ctl/settings.ts`)를 씁니다. 범위를 벗어난 값은 거부합니다.
+설정 화면과 `nunchi set`이 같은 정의(`src/ctl/settings.ts`)를 씁니다. 범위를 벗어난 값은 거부합니다.
 
 | 키 | 기본값 | 허용 값 | 설명 |
 |---|---|---|---|
@@ -289,35 +289,35 @@ SQLite 한 파일(`slmmury.db`)에 아래 테이블이 있습니다. 이전 버�
 | `mentionGroups` | `none` | `S…` ID 쉼표 구분 / none | 반응할 그룹 멘션 |
 | `adUrl` | `none` | `https://…` / none | 사이드바 하단 배너 |
 
-**광고 배너**: 지정한 페이지는 sandbox iframe에서 열립니다. 앱 화면(`window.slmmury`)과 Slack 토큰에는 닿지 못하고, 클릭하면 기본 브라우저로 열립니다.
+**광고 배너**: 지정한 페이지는 sandbox iframe에서 열립니다. 앱 화면(`window.nunchi`)과 Slack 토큰에는 닿지 못하고, 클릭하면 기본 브라우저로 열립니다.
 
-## slmmury 명령
+## nunchi 명령
 
 `npm link`로 등록하면 어느 폴더에서든 씁니다. SSH로 들어와서도 같은 명령을 씁니다. Windows는 OpenSSH 서버를 켜면 됩니다.
 
 ```bash
-slmmury start            # 백그라운드로 실행
-slmmury stop | restart
-slmmury logs [-f]        # 최근 로그 (-f: 계속 보기)
-slmmury update           # git pull → npm install → 빌드 → 실행 중이면 재시작
-slmmury doctor           # Node, Claude Code 로그인, 토큰, 말투 데이터 점검
-slmmury dev              # 터미널에 붙여서 실행 (로그가 바로 보임)
-slmmury test             # 빌드 + 테스트
+nunchi start            # 백그라운드로 실행
+nunchi stop | restart
+nunchi logs [-f]        # 최근 로그 (-f: 계속 보기)
+nunchi update           # git pull → npm install → 빌드 → 실행 중이면 재시작
+nunchi doctor           # Node, Claude Code 로그인, 토큰, 말투 데이터 점검
+nunchi dev              # 터미널에 붙여서 실행 (로그가 바로 보임)
+nunchi test             # 빌드 + 테스트
 
-slmmury status           # 설정, 감시 중인 대화, 처리 필요 초안
-slmmury pause | resume   # 전체 일시정지 / 재개
-slmmury set sendMode draft           # draft | auto
-slmmury set mentionGroups S0123ABCD  # 쉼표로 여러 개, none이면 끔
-slmmury set autoSendMinSec 30        # 타이밍(초): urgentDelaySec, batchDelaySec, autoSendMinSec, autoSendMaxSec
-slmmury set autoMaxRisk 30           # 자동 전송 기준: autoMaxRisk, autoMinConfidence(%), escalateRisk, autoCategories(쉼표 구분)
-slmmury watch 3 off      # 대화별 on | draft | off
-slmmury drafts           # 처리 필요 초안 본문
+nunchi status           # 설정, 감시 중인 대화, 처리 필요 초안
+nunchi pause | resume   # 전체 일시정지 / 재개
+nunchi set sendMode draft           # draft | auto
+nunchi set mentionGroups S0123ABCD  # 쉼표로 여러 개, none이면 끔
+nunchi set autoSendMinSec 30        # 타이밍(초): urgentDelaySec, batchDelaySec, autoSendMinSec, autoSendMaxSec
+nunchi set autoMaxRisk 30           # 자동 전송 기준: autoMaxRisk, autoMinConfidence(%), escalateRisk, autoCategories(쉼표 구분)
+nunchi watch 3 off      # 대화별 on | draft | off
+nunchi drafts           # 처리 필요 초안 본문
 ```
 
 - `status`의 대화 번호는 보관·삭제한 대화를 뺀 현재 목록 기준입니다.
 - 앱은 하나만 뜨게 되어 있어서, 두 번 실행하면 두 번째는 기존 창을 앞으로 가져오고 끝납니다.
-- `ctl`은 `dist/`를 직접 쓰므로 코드를 바꿨으면 먼저 빌드해야 합니다. `slmmury start`와 `update`는 자동으로 빌드합니다.
-- `npm link` 없이 쓰려면 저장소 폴더에서 `node bin/slmmury.js <명령>`을 실행하세요.
+- `ctl`은 `dist/`를 직접 쓰므로 코드를 바꿨으면 먼저 빌드해야 합니다. `nunchi start`와 `update`는 자동으로 빌드합니다.
+- `npm link` 없이 쓰려면 저장소 폴더에서 `node bin/nunchi.js <명령>`을 실행하세요.
 
 ## 데이터 위치
 
@@ -325,18 +325,30 @@ slmmury drafts           # 처리 필요 초안 본문
 
 | OS | 위치 |
 |---|---|
-| macOS | `~/Library/Application Support/slmmury/` |
-| Windows | `%APPDATA%\slmmury\` |
-| Linux | `~/.config/slmmury/` (`$XDG_CONFIG_HOME`이 있으면 그 아래) |
+| macOS | `~/Library/Application Support/nunchi/` |
+| Windows | `%APPDATA%\nunchi\` |
+| Linux | `~/.config/nunchi/` (`$XDG_CONFIG_HOME`이 있으면 그 아래) |
 
 | 파일 | 내용 |
 |---|---|
-| `slmmury.db` | 설정, 감시 대화, 초안, 요약 (SQLite) |
+| `nunchi.db` | 설정, 감시 대화, 초안, 요약 (SQLite) |
 | `credentials.json` | 암호화된 Slack 토큰 (권한 600) |
 | `persona/` | 수집한 내 메시지(`my_messages.jsonl`), 대화 쌍(`pairs.jsonl`), 말투 가이드(`style_guide.md`), 상대별 관계(`relationships.json`) |
-| `app.pid`, `app.log` | `slmmury start`로 띄운 앱의 PID와 로그 |
+| `app.pid`, `app.log` | `nunchi start`로 띄운 앱의 PID와 로그 |
 
 개발할 때는 `.env`(`.env.example` 참고)에 토큰을 넣어도 됩니다. 저장된 토큰이 없을 때만 `.env`를 읽습니다.
+
+### 이전 이름(slmmury)에서 올릴 때
+
+이름이 `slmmury`이던 버전의 데이터는 새 버전을 처음 실행할 때 `nunchi/` 폴더로 자동으로 옮깁니다. DB 파일은 `nunchi.db`로 이름이 바뀝니다.
+
+1. 떠 있는 앱을 끕니다. 옛 이름의 앱과 새 이름의 앱은 서로를 몰라서, 둘 다 켜져 있으면 같은 메시지에 자동 전송이 두 번 나갑니다.
+2. `npm unlink -g slmmury && npm link`로 명령을 다시 등록합니다.
+3. `nunchi start`로 실행합니다.
+
+- 저장된 토큰을 새 이름에서 읽지 못하면 설정 화면이 뜨고 토큰을 다시 넣게 됩니다.
+- 옛 폴더에는 새 폴더에 이미 있던 항목만 남습니다. 앱이 잘 도는 걸 확인한 뒤 지워도 됩니다.
+- DB가 옛 폴더와 새 폴더 양쪽에 있으면 아무것도 옮기지 않고 로그에 경고를 남깁니다. 맞는 쪽만 남기고 다른 쪽을 치우세요.
 
 ## 보안과 안전장치
 

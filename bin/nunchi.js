@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Slmmury 명령줄 도구. 저장소에서 `npm link` 한 번 하면 어디서든 `slmmury <명령>`으로 쓴다.
+// 눈치 명령줄 도구. 저장소에서 `npm link` 한 번 하면 어디서든 `nunchi <명령>`으로 쓴다.
 // 빌드 전에도 돌아야 해서 TypeScript가 아닌 그냥 JS로 둔다. macOS·Windows·Linux 공통.
 'use strict';
 const fs = require('node:fs');
@@ -12,18 +12,18 @@ const isWin = process.platform === 'win32';
 
 // src/paths.ts와 같은 규칙 (빌드 전에도 쓰려고 여기서 직접 계산)
 function dataDir() {
-  if (process.platform === 'darwin') return path.join(os.homedir(), 'Library', 'Application Support', 'slmmury');
-  if (isWin) return path.join(process.env.APPDATA ?? path.join(os.homedir(), 'AppData', 'Roaming'), 'slmmury');
-  return path.join(process.env.XDG_CONFIG_HOME ?? path.join(os.homedir(), '.config'), 'slmmury');
+  if (process.platform === 'darwin') return path.join(os.homedir(), 'Library', 'Application Support', 'nunchi');
+  if (isWin) return path.join(process.env.APPDATA ?? path.join(os.homedir(), 'AppData', 'Roaming'), 'nunchi');
+  return path.join(process.env.XDG_CONFIG_HOME ?? path.join(os.homedir(), '.config'), 'nunchi');
 }
 const DATA = dataDir();
 const PID_FILE = path.join(DATA, 'app.pid');
 const LOG_FILE = path.join(DATA, 'app.log');
 
-const HELP = `사용: slmmury <명령>
+const HELP = `사용: nunchi <명령>
 
 앱
-  start            백그라운드로 실행 (로그: slmmury logs)
+  start            백그라운드로 실행 (로그: nunchi logs)
   stop             종료
   restart          다시 시작
   logs [-f] [줄수] 최근 로그 (-f: 계속 보기)
@@ -72,7 +72,7 @@ function start() {
   const child = spawn(electron, ['.'], { cwd: ROOT, detached: true, stdio: ['ignore', log, log], windowsHide: false });
   child.unref();
   fs.writeFileSync(PID_FILE, String(child.pid));
-  console.log(`시작했습니다 (pid ${child.pid}). 로그: slmmury logs`);
+  console.log(`시작했습니다 (pid ${child.pid}). 로그: nunchi logs`);
 }
 
 function stop() {
@@ -127,7 +127,7 @@ function doctor() {
   const [major, minor] = process.versions.node.split('.').map(Number);
   ok(major > 22 || (major === 22 && minor >= 5), `Node ${process.versions.node}`, 'Node 22.5 이상이 필요합니다');
   ok(fs.existsSync(path.join(ROOT, 'node_modules', 'electron')), '의존성 설치', 'npm install');
-  ok(fs.existsSync(path.join(ROOT, 'dist', 'main.js')), '빌드', 'slmmury update 또는 npx tsc');
+  ok(fs.existsSync(path.join(ROOT, 'dist', 'main.js')), '빌드', 'nunchi update 또는 npx tsc');
   const claude = spawnSync('claude', ['auth', 'status'], { encoding: 'utf8' });
   let logged = false;
   try { logged = JSON.parse(claude.stdout).loggedIn === true; } catch {}

@@ -14,11 +14,20 @@ export type Tokens = { userToken: string; appToken: string };
 
 const FILE = path.join(DATA_DIR, 'credentials.json');
 
-export function loadTokens(): Tokens | null {
-  if (fs.existsSync(FILE)) {
-    const saved = JSON.parse(fs.readFileSync(FILE, 'utf8')) as Record<keyof Tokens, string> & { plain?: boolean };
-    const dec = (v: string) => (saved.plain ? v : safeStorage.decryptString(Buffer.from(v, 'base64')));
-    return { userToken: dec(saved.userToken), appToken: dec(saved.appToken) };
+type Decrypt = (value: string) => string;
+const decryptWithSafeStorage: Decrypt = (v) => safeStorage.decryptString(Buffer.from(v, 'base64'));
+
+export function loadTokens(file = FILE, decryptValue: Decrypt = decryptWithSafeStorage): Tokens | null {
+  if (fs.existsSync(file)) {
+    try {
+      const saved = JSON.parse(fs.readFileSync(file, 'utf8')) as Record<keyof Tokens, string> & { plain?: boolean };
+      const dec = (v: string) => (saved.plain ? v : decryptValue(v));
+      return { userToken: dec(saved.userToken), appToken: dec(saved.appToken) };
+    } catch {
+      // 앱 이름이 바뀌면 안전 저장소 키가 달라져 복호화가 안 될 수 있다. 앱이 꺼지지 않게 저장된 토큰이 없는 것으로 보고 설정 화면에서 다시 받는다.
+      // 오류 메시지에는 파일 내용 조각이 섞일 수 있어 로그에 남기지 않는다
+      console.warn('[setup] 저장된 토큰을 읽지 못했습니다(복호화 실패 또는 파일 손상). 설정 화면에서 토큰을 다시 입력하세요');
+    }
   }
   const { SLACK_USER_TOKEN, SLACK_APP_TOKEN } = process.env;
   return SLACK_USER_TOKEN && SLACK_APP_TOKEN ? { userToken: SLACK_USER_TOKEN, appToken: SLACK_APP_TOKEN } : null;

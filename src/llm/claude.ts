@@ -73,7 +73,7 @@ export function parseUsage(res: unknown): Usage {
 
 export function runClaude<T>(opts: ClaudeOptions): Promise<ClaudeResult<T>> {
   // system 프롬프트(말투 가이드 포함)는 길어질 수 있어 파일로 넘긴다. Windows 명령줄 길이 제한(약 32K자) 대비
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'slmmury-'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'nunchi-'));
   const systemFile = path.join(dir, 'system.txt');
   fs.writeFileSync(systemFile, opts.system);
   const args = [

@@ -1,5 +1,5 @@
 display_information:
-  name: Slmmury
+  name: Nunchi
   description: 개인용 Slack 대리 응답 도우미
 oauth_config:
   scopes:

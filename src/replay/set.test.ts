@@ -13,7 +13,7 @@ const row = (over: Partial<DraftInput>): DraftInput => ({
 });
 
 test('재생 세트: DM·규칙·1차 판단·직접 요청 행을 빼고, skipped면 라벨 false', () => {
-  const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'slmmury-replay-')), 'db.sqlite');
+  const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'nunchi-replay-')), 'db.sqlite');
   const s = openStore(file);
   s.insertDraft(row({ status: 'pending' })); // 1 포함, true
   s.insertDraft(row({ status: 'skipped' })); // 2 포함, false

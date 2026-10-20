@@ -41,7 +41,7 @@ import { runClaude } from './claude.js';
 
 // PATH 맨 앞에 가짜 claude를 둔다. FAKE_CLAUDE 값으로 동작을 고른다
 function fakeClaude(t: { after: (fn: () => void) => void }) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'slmmury-fake-'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'nunchi-fake-'));
   const bin = path.join(dir, 'claude');
   fs.writeFileSync(
     bin,

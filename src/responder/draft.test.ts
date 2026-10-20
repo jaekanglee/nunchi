@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import { loadPersona, MY_SCOPE_FILE } from './draft.js';
 
 function personaDir(): string {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'slmmury-persona-'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'nunchi-persona-'));
   fs.writeFileSync(path.join(dir, 'style_guide.md'), 'S');
   fs.writeFileSync(path.join(dir, 'relationships.json'), '[]');
   fs.writeFileSync(path.join(dir, 'pairs.jsonl'), '');

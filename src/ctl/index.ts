@@ -5,10 +5,11 @@
 //   set <설정> <값>               예) set sendMode draft
 //   watch <번호|키> <on|draft|off> 대화별 모드
 //   drafts                       처리 필요 초안 본문까지 보기
-import { DB_PATH } from '../paths.js';
+import { DB_PATH, migrateLegacyData } from '../paths.js';
 import { openStore, type WatchMode } from '../store/db.js';
 import { SETTINGS, validateSetting } from './settings.js';
 
+migrateLegacyData(); // 컷오버 직후 `nunchi status`가 먼저 불려도 빈 DB를 새로 만들지 않게
 const store = openStore(DB_PATH);
 const [cmd, ...args] = process.argv.slice(2);
 

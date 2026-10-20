@@ -1,4 +1,4 @@
-// 들어온 message 이벤트 중 Slmmury가 처리할 대상인지 판정한다. (design.md §4.2)
+// 들어온 message 이벤트 중 눈치가 처리할 대상인지 판정한다. (design.md §4.2)
 
 export type MessageEvent = {
   type: string;

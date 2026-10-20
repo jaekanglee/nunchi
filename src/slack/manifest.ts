@@ -7,7 +7,7 @@ export type ManifestOptions = {
   personaLearning: boolean; // 말투 학습(검색)
 };
 
-export const DEFAULT_OPTIONS: ManifestOptions = { appName: 'Slmmury', privateChannels: true, groupDms: true, personaLearning: true };
+export const DEFAULT_OPTIONS: ManifestOptions = { appName: 'Nunchi', privateChannels: true, groupDms: true, personaLearning: true };
 
 type ScopeInfo = {
   scope: string;
