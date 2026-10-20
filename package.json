@@ -6,7 +6,7 @@
   "scripts": {
     "test": "tsc && node --test \"dist/**/*.test.js\"",
     "build": "tsc",
-    "start": "tsc && electron .",
+    "start": "node bin/nunchi.js dev",
     "send-as-me": "tsc && node dist/scripts/send-as-me.js",
     "persona:collect": "tsc && node dist/persona/collect.js",
     "persona:analyze": "tsc && node dist/persona/analyze.js",

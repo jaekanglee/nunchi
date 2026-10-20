@@ -210,6 +210,7 @@ Slack ──Socket Mode──▶ gateway ──▶ engine ──▶ store (SQLit
     ├── setup.ts            Claude 로그인 확인, 토큰 검증·암호화 저장
     ├── paths.ts            OS별 데이터 폴더 위치
     ├── windowState.ts      창 크기·위치 저장·복원
+    ├── brand.ts            macOS 개발 실행의 앱 이름(Dock·알림)을 번들에서 바꿈
     ├── slack/
     │   ├── gateway.ts      Socket Mode 연결
     │   ├── router.ts       이벤트 라우팅, 멘션 추출, 대화 키
@@ -377,7 +378,9 @@ nunchi drafts           # 처리 필요 초안 본문
 - **Windows**
   - `npm start`로 실행할 때 알림은 Electron 이름으로 뜹니다.
   - SSH로 원격 제어하려면 "설정 → 선택적 기능 → OpenSSH 서버"를 켜세요.
-- **macOS**: 제목줄을 숨기고 신호등 버튼을 상단 바 위에 얹습니다.
+- **macOS**
+  - 제목줄을 숨기고 신호등 버튼을 상단 바 위에 얹습니다.
+  - 개발 실행(`nunchi start`, `npm start`)은 `node_modules` 안 Electron.app 번들의 이름을 "눈치"로 맞춘 뒤 띄웁니다. 메뉴바·Cmd+Tab은 Info.plist의 `CFBundleName`을, Dock·Finder는 번들 폴더 이름(`Electron.app`)을 쓰는데, 폴더 이름 대신 언어별 `InfoPlist.strings`의 이름을 쓰게 하는 방식입니다. `npm install`로 번들이 되돌아가도 실행할 때마다 다시 적용됩니다. 번들 ID는 그대로라 알림 허용은 유지됩니다.
 
 ## 개발
 

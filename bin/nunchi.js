@@ -51,6 +51,14 @@ function build() {
   run(process.execPath, [path.join(ROOT, 'node_modules', 'typescript', 'bin', 'tsc')]);
 }
 
+// macOS는 Dock·Cmd+Tab·알림의 앱 이름을 Electron.app 번들에서 읽는다. node_modules의 번들 이름을 맞춘다.
+// npm install로 번들이 되돌아가도 실행할 때마다 다시 적용된다. 빌드 뒤에 불러야 dist/brand.js가 있다
+function brandApp() {
+  if (process.platform !== 'darwin') return;
+  const app = path.join(ROOT, 'node_modules', 'electron', 'dist', 'Electron.app');
+  if (require(path.join(ROOT, 'dist', 'brand.js')).brandElectronApp(app, '눈치')) console.log('앱 이름을 눈치로 맞췄습니다');
+}
+
 function runningPid() {
   try {
     const pid = Number(fs.readFileSync(PID_FILE, 'utf8'));
@@ -65,6 +73,7 @@ function start() {
   const pid = runningPid();
   if (pid) return console.log(`이미 실행 중입니다 (pid ${pid})`);
   build();
+  brandApp();
   fs.mkdirSync(DATA, { recursive: true });
   const log = fs.openSync(LOG_FILE, 'a');
   fs.writeSync(log, `\n==== ${new Date().toLocaleString()} 시작 ====\n`);
@@ -155,7 +164,7 @@ async function main() {
     case 'update': return update();
     case 'doctor': return doctor();
     case 'test': return run('npm', ['test']);
-    case 'dev': build(); return run(require(path.join(ROOT, 'node_modules', 'electron')), ['.']);
+    case 'dev': build(); brandApp(); return run(require(path.join(ROOT, 'node_modules', 'electron')), ['.', ...args]); // npm start -- --no-sandbox처럼 넘긴 인자도 Electron으로
     case 'status': case 'pause': case 'resume': case 'set': case 'watch': case 'drafts': return ctl([cmd, ...args]);
     case undefined: case 'help': case '-h': case '--help': return console.log(HELP);
     default:
