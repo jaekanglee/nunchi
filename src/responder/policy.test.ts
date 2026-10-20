@@ -36,7 +36,7 @@ test('자동 모드여도 확신이 낮거나 위험도가 애매하면 approve'
 test('holdReasons: 자동으로 안 보낸 이유를 전부 알려준다', () => {
   assert.deepEqual(holdReasons(safe, 'auto'), []);
   assert.deepEqual(holdReasons(safe, 'draft'), ['전송 설정이 초안 모드']);
-  assert.deepEqual(holdReasons({ ...safe, category: '인사/잡담', confidence: 0.6 }, 'auto'), ['확신 0.6 (자동 전송은 0.8 이상)']);
+  assert.deepEqual(holdReasons({ ...safe, category: '인사/잡담', confidence: 0.6 }, 'auto'), ['확신 60% (자동 전송은 80% 이상)']);
   assert.deepEqual(holdReasons({ ...safe, category: '정보질문', risk: 30 }, 'auto'), [
     "'정보질문'은 자동 전송 대상이 아님 (인사/잡담, 단순확인·리액션만)",
     '위험 30 (자동 전송은 20 미만)',

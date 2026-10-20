@@ -59,7 +59,7 @@ export function holdReasons(a: Assessment, sendMode: SendMode, t: Thresholds = D
   if (a.needs_facts_i_dont_know) r.push('내가 모르는 사실이 필요함');
   if (a.risk >= t.escalateRisk) r.push(`위험 ${a.risk} (${t.escalateRisk} 이상은 직접 확인)`);
   else if (a.risk >= t.autoMaxRisk) r.push(`위험 ${a.risk} (자동 전송은 ${t.autoMaxRisk} 미만)`);
-  if (a.confidence < t.autoMinConfidence) r.push(`확신 ${a.confidence} (자동 전송은 ${t.autoMinConfidence} 이상)`);
+  if (a.confidence < t.autoMinConfidence) r.push(`확신 ${Math.round(a.confidence * 100)}% (자동 전송은 ${Math.round(t.autoMinConfidence * 100)}% 이상)`);
   if (sendMode === 'draft') r.unshift('전송 설정이 초안 모드');
   return r;
 }

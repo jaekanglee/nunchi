@@ -341,12 +341,13 @@
 
       <div class="card step">
         <h3>자동 전송 기준</h3>
-        <div class="hint">전송 방식이 '자동'일 때 아래 조건을 모두 만족한 초안만 확인 없이 보냅니다. 위험·확신은 초안을 쓴 모델이 매긴 값입니다. 업무지시·결정, 장애·긴급, 민감은 설정과 상관없이 항상 직접 확인합니다.</div>
+        <div class="hint">초안마다 모델이 점수 두 개를 매깁니다. <b>위험</b>(0~100)은 확인 없이 보냈을 때 문제가 될 가능성, <b>확신</b>(0~100%)은 초안이 내 말투·의도에 맞을 가능성입니다. 두 점수는 합치거나 곱하지 않고 아래 기준과 하나씩 비교합니다. 업무지시·결정, 장애·긴급, 민감은 점수와 상관없이 항상 직접 확인합니다.</div>
         <div class="srow"><div><b>자동 전송할 카테고리</b><small>여기서 고른 종류의 대화만 자동으로 보냅니다</small></div></div>
         <div id="autoCategories"></div>
-        <div class="srow"><div><b>위험 상한</b><small>위험(0~100)이 이 값 미만일 때만 자동 전송합니다. 낮을수록 보수적입니다</small></div><span class="numbox">&lt;<input type="number" id="autoMaxRisk" min="0" max="100" /></span></div>
-        <div class="srow"><div><b>확신 하한</b><small>초안이 내 말투·의도에 맞을 확신이 이 값 이상일 때만 자동 전송합니다. 높을수록 보수적입니다</small></div><span class="numbox">≥<input type="number" id="autoMinConfidence" min="0" max="100" />%</span></div>
-        <div class="srow"><div><b>직접 확인 기준</b><small>위험이 이 값 이상이면 자동/초안 모드와 상관없이 '직접 확인'으로 올립니다</small></div><span class="numbox">≥<input type="number" id="escalateRisk" min="1" max="100" /></span></div>
+        <div class="srow"><div><b>자동 전송할 위험</b><small>위험이 이 값보다 낮은 초안만 자동으로 보냅니다. 낮출수록 자동 전송이 줄어듭니다</small></div><span class="numbox"><input type="number" id="autoMaxRisk" min="0" max="100" />미만</span></div>
+        <div class="srow"><div><b>직접 확인할 위험</b><small>위험이 이 값 이상이면 초안 모드여도 '직접 확인'으로 올려 알립니다. 낮출수록 직접 볼 일이 늘어납니다</small></div><span class="numbox"><input type="number" id="escalateRisk" min="1" max="100" />이상</span></div>
+        <div class="srow"><div><b>자동 전송할 확신</b><small>확신이 이 값 이상인 초안만 자동으로 보냅니다. 높일수록 자동 전송이 줄어듭니다</small></div><span class="numbox"><input type="number" id="autoMinConfidence" min="0" max="100" />% 이상</span></div>
+        <div class="note info" id="riskZones"></div>
       </div>
 
       <div class="card step">
@@ -653,7 +654,7 @@
         d.status === 'scheduled' && state.timers?.send[d.id] ? timerChip(state.timers.send[d.id], '자동 전송까지', '전송 중…') : '',
         el('span', { className: 'chip', textContent: d.category }),
         el('span', { className: `chip ${d.risk >= Number(state.settings.escalateRisk) ? 'danger' : ''}`, textContent: `위험 ${d.risk}` }),
-        el('span', { className: 'chip', textContent: `확신 ${d.confidence}` }),
+        el('span', { className: 'chip', textContent: `확신 ${Math.round(d.confidence * 100)}%` }),
         el('span', { textContent: d.reason })));
       // 자동 모드인데 왜 대기 중인지
       if (d.hold_reason) box.append(el('div', { className: 'hold' }, el('b', { textContent: d.status === 'escalated' ? '직접 확인 이유' : '자동 전송 안 함' }), d.hold_reason));
@@ -898,6 +899,7 @@
       $('autoCategories').replaceChildren(...state.autoEligible.map((c) => el('label', { className: 'opt' },
         el('input', { type: 'checkbox', checked: autoCats.includes(c), value: c, onchange: saveAutoCategories }),
         el('div', {}, el('b', { textContent: c })))));
+      renderRiskZones();
       $('inboxCount').textContent = state.openDrafts.length;
       $('inboxSec').classList.toggle('collapsed', inboxCollapsed);
       $('watchCount').textContent = state.watches.length;
@@ -964,6 +966,21 @@
       try { await api.setSetting('myScope', $('myScope').value.trim() || 'none'); toast('저장했습니다. 다음 판단부터 적용됩니다'); }
       catch (err) { toast(errText(err), 'err'); $('myScope').value = state.settings.myScope === 'none' ? '' : state.settings.myScope; }
     };
+    // 위험 기준 두 개가 위험 점수를 세 구간으로 나눈다. 지금 설정값으로 풀어 쓴다
+    function renderRiskZones() {
+      const s = state.settings;
+      const esc = Number(s.escalateRisk), auto = Math.min(Number(s.autoMaxRisk), esc);
+      const range = (lo, hi) => (lo === hi ? `${lo}` : `${lo}~${hi}`);
+      const autoText = s.sendMode === 'draft'
+        ? "승인 대기 (전송 방식이 '초안만'이라서. '자동'으로 바꾸면 자동 전송)"
+        : `자동 전송 (고른 카테고리이고 확신 ${s.autoMinConfidence}% 이상일 때. 아니면 승인 대기)`;
+      const rows = [
+        auto > 0 && `위험 ${range(0, auto - 1)} → ${autoText}`,
+        auto < esc && `위험 ${range(auto, esc - 1)} → 승인 대기: 내가 보고 보내기`,
+        `위험 ${esc} 이상 → 직접 확인: 자동으로 보내지 않고 알림`,
+      ].filter(Boolean);
+      $('riskZones').replaceChildren(el('b', { textContent: '지금 설정이면' }), ...rows.map((t) => el('div', { textContent: `· ${t}` })));
+    }
     async function saveAutoCategories() {
       const picked = [...$('autoCategories').querySelectorAll('input:checked')].map((i) => i.value);
       try { await api.setSetting('autoCategories', picked.join(',') || 'none'); toast('저장했습니다. 다음 판단부터 적용됩니다'); }
