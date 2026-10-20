@@ -1,9 +1,18 @@
-# Nunchi
+<p align="center"><img src="assets/icon.png" width="96" alt="" /></p>
+
+<h1 align="center">Nunchi</h1>
 
 내 Slack 계정으로 들어온 메시지를 받아 **내 말투로 답장 초안**을 쓰고, 위험도에 따라 자동 전송 / 승인 대기 / 직접 확인으로 나누는 데스크톱 앱입니다. macOS · Windows · Linux에서 돌아갑니다. 대화 요약과 SSH 원격 제어도 됩니다.
 
 - LLM은 이 컴퓨터에 로그인된 **Claude Code**(`claude -p`)를 씁니다. API 키는 필요 없습니다.
 - Slack은 각자 만든 Slack 앱의 **User Token**으로 동작합니다. 보내는 메시지는 내 이름으로 나갑니다.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/main-dark.png" />
+  <img src="docs/screenshots/main-light.png" alt="메인 화면: 왼쪽 감시 중인 대화 목록, 위쪽 처리 필요 초안, 가운데 대화와 승인 대기 초안, 오른쪽 대화 요약" />
+</picture>
+
+<sub>메인 화면. 위쪽은 처리할 초안, 가운데는 대화와 승인 대기 초안, 오른쪽은 대화 요약입니다. 스크린샷의 사람과 대화는 예시 데이터입니다.</sub>
 
 ## 목차
 
@@ -69,6 +78,10 @@ nunchi start
 3. **말투 학습**: 공개 채널에 내가 쓴 메시지(기본 6개월, 최대 1000개)로 말투 가이드를 만듭니다. 몇 분 걸립니다.
 4. **그룹 멘션 (선택)**: 내가 속한 사용자 그룹 ID(`S…`)를 넣으면 그 그룹이 멘션돼도 반응합니다.
 5. **시작하기**
+
+| 첫 실행 설정 | Slack 연결 가이드 |
+|---|---|
+| ![첫 실행 설정 화면](docs/screenshots/setup.png) | ![Slack 연결 가이드의 매니페스트 만들기](docs/screenshots/guide.png) |
 
 설정 화면은 상단 ⚙ 버튼으로 다시 열 수 있습니다. 토큰 교체나 말투 재학습을 할 때 씁니다.
 
@@ -201,6 +214,7 @@ Slack ──Socket Mode──▶ gateway ──▶ engine ──▶ store (SQLit
 ├── bin/nunchi.js           명령줄 도구 (빌드 전에도 돌도록 순수 JS)
 ├── assets/                 앱 아이콘
 ├── docs/design.md          설계 문서
+├── docs/screenshots/       README 스크린샷 (예시 데이터)
 ├── slack-manifest.yaml     기본 옵션의 Slack 앱 매니페스트
 ├── static/index.html       렌더러 UI (HTML+CSS+JS 한 파일)
 └── src/
@@ -269,6 +283,8 @@ SQLite 한 파일(`nunchi.db`)에 아래 테이블이 있습니다. 이전 버�
 ## 설정 레퍼런스
 
 설정 화면과 `nunchi set`이 같은 정의(`src/ctl/settings.ts`)를 씁니다. 범위를 벗어난 값은 거부합니다.
+
+<img src="docs/screenshots/settings.png" width="640" alt="설정 화면의 자동 전송 기준" />
 
 | 키 | 기본값 | 허용 값 | 설명 |
 |---|---|---|---|
