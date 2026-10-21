@@ -344,56 +344,34 @@
     <div class="wrap" id="settingsMain">
       <div class="settings-head"><h1>설정</h1><button id="closeSettings" class="btn">닫기</button></div>
 
-      <div class="card step menu" id="openAi" role="button" tabindex="0">
+      <div class="card step menu" id="openAi" data-pane="settingsAi" role="button" tabindex="0">
         <div><h3>AI 설정</h3><div class="hint">담당 업무 · 내 프로젝트(키워드) · 내 지침 · 모델</div><div class="hint" id="aiSummary" style="margin-top:4px"></div></div>
         <span class="chev">›</span>
       </div>
 
-      <div class="card step">
-        <h3>응답 타이밍</h3>
-        <div class="hint">메시지가 온 뒤 언제 판단하고, 자동 전송은 얼마나 기다렸다 보낼지 정합니다. 링크로 등록한 대화는 등록하자마자 판단합니다. 판단하는 중에 온 메시지는 그 판단이 끝나면 이어서 판단합니다.</div>
-        <div class="srow"><div><b>나를 부른 메시지 · DM</b><small>첫 메시지부터 이만큼 기다렸다 판단합니다. 그 사이 온 메시지는 기다림을 늘리지 않고 함께 판단합니다</small></div><span class="numbox"><input type="number" id="urgentDelaySec" min="3" max="600" />초</span></div>
-        <div class="srow"><div><b>눈치 보는 스레드의 나머지 댓글</b><small>첫 댓글부터 이만큼 모았다가 한 번에 판단합니다. 길수록 호출이 줄어듭니다</small></div><span class="numbox"><input type="number" id="batchDelaySec" min="10" max="3600" />초</span></div>
-        <div class="srow"><div><b>자동 전송 지연</b><small>자동 전송할 초안은 이 범위에서 무작위로 기다렸다 보냅니다. 그 사이 대화가 바뀌면 보내지 않습니다</small></div><span class="numbox"><input type="number" id="autoSendMinSec" min="0" max="3600" />~<input type="number" id="autoSendMaxSec" min="0" max="3600" />초</span></div>
+      <div class="card step menu" id="openReply" data-pane="settingsReply" role="button" tabindex="0">
+        <div><h3>응답 · 자동 전송</h3><div class="hint">응답 타이밍 · 자동 전송 기준과 지연</div><div class="hint" id="replySummary" style="margin-top:4px"></div></div>
+        <span class="chev">›</span>
       </div>
 
-      <div class="card step">
-        <h3>자동 전송 기준</h3>
-        <div class="hint">초안마다 모델이 점수 두 개를 매깁니다. <b>위험</b>(0~100)은 확인 없이 보냈을 때 문제가 될 가능성, <b>확신</b>(0~100%)은 초안이 내 말투·의도에 맞을 가능성입니다. 두 점수는 합치거나 곱하지 않고 아래 기준과 하나씩 비교합니다. 업무지시·결정, 장애·긴급, 민감은 점수와 상관없이 항상 직접 확인합니다.</div>
-        <div class="srow"><div><b>자동 전송할 카테고리</b><small>여기서 고른 종류의 대화만 자동으로 보냅니다</small></div></div>
-        <div id="autoCategories"></div>
-        <div class="srow"><div><b>자동 전송할 위험</b><small>위험이 이 값보다 낮은 초안만 자동으로 보냅니다. 낮출수록 자동 전송이 줄어듭니다</small></div><span class="numbox"><input type="number" id="autoMaxRisk" min="0" max="100" />미만</span></div>
-        <div class="srow"><div><b>직접 확인할 위험</b><small>위험이 이 값 이상이면 초안 모드여도 '직접 확인'으로 올려 알립니다. 낮출수록 직접 볼 일이 늘어납니다</small></div><span class="numbox"><input type="number" id="escalateRisk" min="1" max="100" />이상</span></div>
-        <div class="srow"><div><b>자동 전송할 확신</b><small>확신이 이 값 이상인 초안만 자동으로 보냅니다. 높일수록 자동 전송이 줄어듭니다</small></div><span class="numbox"><input type="number" id="autoMinConfidence" min="0" max="100" />% 이상</span></div>
-        <div class="note info" id="riskZones"></div>
+      <div class="card step menu" id="openSetup" role="button" tabindex="0">
+        <div><h3>Slack 연결</h3><div class="hint">Slack 토큰 · 말투 학습 · 그룹 멘션</div><div class="hint" id="slackSummary" style="margin-top:4px"></div></div>
+        <span class="chev">›</span>
       </div>
 
-      <div class="card step">
-        <h3>Slack 연결 · 말투 학습 · 그룹 멘션</h3>
-        <div class="hint">토큰 교체, 말투 다시 학습, 반응할 그룹 멘션을 바꿉니다.</div>
-        <div class="row" style="margin-top:10px"><button id="openSetup" class="btn primary">연결 설정 열기</button><button class="btn" data-guide="make">📖 Slack 연결 가이드</button></div>
+      <div class="card step menu" id="openArchive" role="button" tabindex="0">
+        <div><h3>보관함</h3><div class="hint">보관한 대화를 보고 복원하거나 삭제합니다. 보관한 대화는 감지하지 않습니다.</div></div>
+        <span class="chev">›</span>
       </div>
 
-      <div class="card step">
-        <h3>보관함</h3>
-        <div class="hint">보관한 대화를 모아 보고 복원하거나 삭제합니다. 보관한 대화는 감지하지 않습니다.</div>
-        <div class="row" style="margin-top:10px"><button id="openArchive" class="btn">보관한 대화 보기</button></div>
-      </div>
-
-      <div class="card step">
-        <h3>광고 배너</h3>
-        <div class="hint">사이드바 맨 아래에 띄울 광고 페이지 주소(https)입니다. 광고 페이지는 앱과 분리된 창(iframe)에서 열려 Slack 토큰이나 메시지에 접근할 수 없고, 광고를 누르면 기본 브라우저로 열립니다. 비우면 배너를 숨깁니다.</div>
-        <div class="srow"><div><b>광고 페이지 주소</b><small>예: https://내도메인/nunchi-ad.html</small></div><input id="adUrl" class="input" placeholder="https://…" style="width:280px" /></div>
-      </div>
-
-      <div class="card step">
-        <h3>원격 제어</h3>
-        <div class="hint">밖에서는 SSH로 들어와 저장소 폴더에서 <code>npm run ctl -- status</code>, <code>pause</code>, <code>set model …</code> 등으로 같은 설정을 바꿀 수 있습니다.</div>
+      <div class="card step menu" id="openEtc" data-pane="settingsEtc" role="button" tabindex="0">
+        <div><h3>기타</h3><div class="hint">광고 배너 · 원격 제어</div><div class="hint" id="etcSummary" style="margin-top:4px"></div></div>
+        <span class="chev">›</span>
       </div>
     </div>
 
     <div class="wrap" id="settingsAi" hidden>
-      <div class="settings-head"><h1>AI 설정</h1><button id="closeAi" class="btn">← 설정으로 돌아가기</button></div>
+      <div class="settings-head"><h1>AI 설정</h1><button class="btn back">← 설정으로 돌아가기</button></div>
       <div class="hint" style="margin:-8px 0 14px">Claude가 내 차례인지 판단하고 답장을 쓸 때 읽는 근거와 모델입니다. 근거는 내 Slack 메시지로 학습한 내용, 내가 등록한 프로젝트, 내가 쓴 지침입니다.</div>
 
       <div class="card step">
@@ -424,6 +402,44 @@
         <div class="srow"><div><b>코드 탐색</b><small>'코드 보고 다시 쓰기'에서 코드를 찾는 모델입니다. 답장은 기본 모델이 씁니다</small></div><select id="codeModel" class="input"></select></div>
         <div class="srow"><div><b>초안 effort</b><small>판단·초안을 얼마나 깊게 생각할지</small></div><select id="draftEffort" class="input"></select></div>
         <div class="srow"><div><b>요약 effort</b><small>요약을 얼마나 깊게 생각할지</small></div><select id="summaryEffort" class="input"></select></div>
+      </div>
+    </div>
+
+    <div class="wrap" id="settingsReply" hidden>
+      <div class="settings-head"><h1>응답 · 자동 전송</h1><button class="btn back">← 설정으로 돌아가기</button></div>
+
+      <div class="card step">
+        <h3>응답 타이밍</h3>
+        <div class="hint">메시지가 온 뒤 언제 판단할지 정합니다. 링크로 등록한 대화는 등록하자마자 판단합니다. 판단하는 중에 온 메시지는 그 판단이 끝나면 이어서 판단합니다.</div>
+        <div class="srow"><div><b>나를 부른 메시지 · DM</b><small>첫 메시지부터 이만큼 기다렸다 판단합니다. 그 사이 온 메시지는 기다림을 늘리지 않고 함께 판단합니다</small></div><span class="numbox"><input type="number" id="urgentDelaySec" min="3" max="600" />초</span></div>
+        <div class="srow"><div><b>눈치 보는 스레드의 나머지 댓글</b><small>첫 댓글부터 이만큼 모았다가 한 번에 판단합니다. 길수록 호출이 줄어듭니다</small></div><span class="numbox"><input type="number" id="batchDelaySec" min="10" max="3600" />초</span></div>
+      </div>
+
+      <div class="card step">
+        <h3>자동 전송</h3>
+        <div class="hint">초안마다 모델이 점수 두 개를 매깁니다. <b>위험</b>(0~100)은 확인 없이 보냈을 때 문제가 될 가능성, <b>확신</b>(0~100%)은 초안이 내 말투·의도에 맞을 가능성입니다. 두 점수는 합치거나 곱하지 않고 아래 기준과 하나씩 비교합니다. 업무지시·결정, 장애·긴급, 민감은 점수와 상관없이 항상 직접 확인합니다.</div>
+        <div class="srow"><div><b>자동 전송할 카테고리</b><small>여기서 고른 종류의 대화만 자동으로 보냅니다</small></div></div>
+        <div id="autoCategories"></div>
+        <div class="srow"><div><b>자동 전송할 위험</b><small>위험이 이 값보다 낮은 초안만 자동으로 보냅니다. 낮출수록 자동 전송이 줄어듭니다</small></div><span class="numbox"><input type="number" id="autoMaxRisk" min="0" max="100" />미만</span></div>
+        <div class="srow"><div><b>직접 확인할 위험</b><small>위험이 이 값 이상이면 초안 모드여도 '직접 확인'으로 올려 알립니다. 낮출수록 직접 볼 일이 늘어납니다</small></div><span class="numbox"><input type="number" id="escalateRisk" min="1" max="100" />이상</span></div>
+        <div class="srow"><div><b>자동 전송할 확신</b><small>확신이 이 값 이상인 초안만 자동으로 보냅니다. 높일수록 자동 전송이 줄어듭니다</small></div><span class="numbox"><input type="number" id="autoMinConfidence" min="0" max="100" />% 이상</span></div>
+        <div class="note info" id="riskZones"></div>
+        <div class="srow"><div><b>자동 전송 지연</b><small>자동 전송할 초안은 이 범위에서 무작위로 기다렸다 보냅니다. 그 사이 대화가 바뀌면 보내지 않습니다</small></div><span class="numbox"><input type="number" id="autoSendMinSec" min="0" max="3600" />~<input type="number" id="autoSendMaxSec" min="0" max="3600" />초</span></div>
+      </div>
+    </div>
+
+    <div class="wrap" id="settingsEtc" hidden>
+      <div class="settings-head"><h1>기타</h1><button class="btn back">← 설정으로 돌아가기</button></div>
+
+      <div class="card step">
+        <h3>광고 배너</h3>
+        <div class="hint">사이드바 맨 아래에 띄울 광고 페이지 주소(https)입니다. 광고 페이지는 앱과 분리된 창(iframe)에서 열려 Slack 토큰이나 메시지에 접근할 수 없고, 광고를 누르면 기본 브라우저로 열립니다. 비우면 배너를 숨깁니다.</div>
+        <div class="srow"><div><b>광고 페이지 주소</b><small>예: https://내도메인/nunchi-ad.html</small></div><input id="adUrl" class="input" placeholder="https://…" style="width:280px" /></div>
+      </div>
+
+      <div class="card step">
+        <h3>원격 제어</h3>
+        <div class="hint">밖에서는 SSH로 들어와 저장소 폴더에서 <code>npm run ctl -- status</code>, <code>pause</code>, <code>set model …</code> 등으로 같은 설정을 바꿀 수 있습니다.</div>
       </div>
     </div>
   </div>
@@ -969,7 +985,7 @@
       if (document.activeElement !== $('myGuide')) $('myGuide').value = state.settings.myGuide === 'none' ? '' : state.settings.myGuide;
       $('myScopeAuto').textContent = state.autoScope ? `비우면 자동: ${state.autoScope}` : '자동 값 없음 (말투 분석을 다시 하면 생깁니다)';
       renderProjectDirs();
-      renderAiSummary();
+      renderMenuSummaries();
       $('codeNotes').textContent = `코드 노트 ${state.codeNotes ?? 0}개`;
       const autoCats = state.settings.autoCategories === 'none' ? [] : state.settings.autoCategories.split(',');
       $('autoCategories').replaceChildren(...state.autoEligible.map((c) => el('label', { className: 'opt' },
@@ -1020,7 +1036,7 @@
     }
     const showSetup = async () => { $('setup').hidden = false; await loadSetup(); };
     $('openSetup').onclick = showSetup;
-    $('openSettings').onclick = () => { showAi(false); $('settings').hidden = false; };
+    $('openSettings').onclick = () => { showPane('settingsMain'); $('settings').hidden = false; };
     // 타이밍 설정: 값을 바꾸면 바로 저장. 범위를 벗어나면 토스트로 알리고 원래 값으로
     const TIMING = ['urgentDelaySec', 'batchDelaySec', 'autoSendMinSec', 'autoSendMaxSec', 'autoMaxRisk', 'autoMinConfidence', 'escalateRisk'];
     // 광고는 sandbox iframe: 스크립트는 돌지만 앱 화면(window.nunchi)에는 닿지 못하고, 앱 창을 이동시킬 수 없다
@@ -1080,8 +1096,8 @@
           note);
       }) : [el('div', { className: 'hint', textContent: '추가한 폴더가 없습니다' })]));
     }
-    // 설정 첫 화면의 AI 설정 메뉴에 지금 값을 한 줄로
-    function renderAiSummary() {
+    // 설정 첫 화면의 메뉴마다 지금 값을 한 줄로
+    function renderMenuSummaries() {
       const s = state.settings;
       const scope = s.myScope !== 'none' ? s.myScope : state.autoScope;
       $('aiSummary').textContent = [
@@ -1090,16 +1106,26 @@
         s.myGuide !== 'none' ? '지침 있음' : '지침 없음',
         MODEL_LABEL[s.model] ?? s.model,
       ].join(' · ');
+      const cats = s.autoCategories === 'none' ? 0 : s.autoCategories.split(',').length;
+      $('replySummary').textContent = [
+        `나를 부르면 ${s.urgentDelaySec}초 · 댓글은 ${s.batchDelaySec}초 모아서 판단`,
+        s.sendMode === 'auto' ? `자동 전송 ${cats}종류 · 위험 ${s.autoMaxRisk} 미만` : '자동 전송 안 함 (초안만)',
+      ].join(' · ');
+      const groups = s.mentionGroups === 'none' ? 0 : s.mentionGroups.split(',').length;
+      $('slackSummary').textContent = groups ? `그룹 멘션 ${groups}개` : '그룹 멘션 없음';
+      $('etcSummary').textContent = s.adUrl !== 'none' ? '광고 배너 켜짐' : '광고 배너 꺼짐';
     }
-    // AI 설정은 설정 아래 한 단계 더 들어가는 화면
-    function showAi(on) {
-      $('settingsMain').hidden = on;
-      $('settingsAi').hidden = !on;
+    // 설정 첫 화면(settingsMain)과 한 단계 더 들어가는 화면들. 한 번에 하나만 보인다
+    const PANES = ['settingsMain', 'settingsAi', 'settingsReply', 'settingsEtc'];
+    function showPane(id) {
+      for (const p of PANES) $(p).hidden = p !== id;
       $('settings').scrollTop = 0;
     }
-    $('openAi').onclick = () => showAi(true);
-    $('openAi').onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); showAi(true); } };
-    $('closeAi').onclick = () => showAi(false);
+    for (const m of document.querySelectorAll('#settings .menu')) {
+      if (m.dataset.pane) m.onclick = () => showPane(m.dataset.pane); // Slack 연결·보관함은 각자 다른 화면을 연다
+      m.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); m.click(); } };
+    }
+    for (const b of document.querySelectorAll('#settings .back')) b.onclick = () => showPane('settingsMain');
     $('openNotes').onclick = () => api.openNotes().catch((err) => toast(errText(err), 'err'));
     $('addProjectDir').onclick = () => act($('addProjectDir'), '고르는 중…', async () => {
       const picked = await api.pickFolders();
@@ -1152,7 +1178,7 @@
       if (e.key !== 'Escape') return;
       if (!$('archive').hidden) $('archive').hidden = true;
       else if (!$('guide').hidden || !$('setup').hidden) return;
-      else if (!$('settingsAi').hidden) showAi(false);
+      else if ($('settingsMain').hidden) showPane('settingsMain');
       else $('settings').hidden = true;
     });
     $('recheckClaude').onclick = loadSetup;
