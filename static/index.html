@@ -212,6 +212,10 @@
     #settings .numbox { display: flex; align-items: center; gap: 6px; flex: none; color: var(--sub); }
     #settings .numbox input { width: 76px; border: 1px solid var(--line); background: var(--bg); border-radius: 8px; padding: 6px 8px; text-align: right; font: inherit; color: var(--text); outline: none; }
     #settings .numbox input:focus { border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-soft); }
+    /* 담당 업무·광고 주소 같은 글자 입력칸. 기본 흰 입력칸은 다크 모드에서 튀고 안내 문구가 흐려서 숫자칸과 같은 모양으로 */
+    #settings input.input { flex: none; border: 1px solid var(--line); background: var(--bg); border-radius: 8px; padding: 6px 10px; font: inherit; font-size: 13px; color: var(--text); outline: none; }
+    #settings input.input::placeholder { color: var(--sub); opacity: 1; }
+    #settings input.input:focus { border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-soft); }
     .settings-btn { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; }
     .settings-btn .gear { font-size: 16px; line-height: 1; }
     #setup { position: fixed; inset: 0; z-index: 10; background: var(--bg); overflow: auto; padding: 56px 24px 40px; -webkit-app-region: drag; }
@@ -435,7 +439,7 @@
 
       <div class="card step" id="stepGroups">
         <h3><span class="num"><span>4</span></span>그룹 멘션 <span class="hint">(선택)</span></h3>
-        <div class="hint">내가 속한 사용자 그룹이 멘션될 때도 반응하게 하려면 그룹 ID(<code>S…</code>)를 쉼표로 적으세요. Slack에서 그룹 프로필 → ⋯ → 그룹 ID 복사.</div>
+        <div class="hint">내가 속한 사용자 그룹이 멘션될 때도 반응하게 하려면 그룹 ID(<code>S…</code>)를 적으세요. 여러 개면 쉼표·공백·줄바꿈으로 나눕니다. Slack에서 그룹 프로필 → ⋯ → 그룹 ID 복사.</div>
         <div class="row" style="margin-top:8px"><label class="field" style="flex:1;margin:0"><input id="groups" placeholder="S0123ABCD, S0456EFGH" /></label><button id="saveGroups" class="btn">저장</button><span id="groupsResult" class="result"></span></div>
       </div>
 
@@ -978,7 +982,7 @@
       mark('stepSlack', setupState.tokens); if (setupState.tokens && !$('tokenResult').textContent) result('tokenResult', true, '저장된 토큰 있음 (바꾸려면 다시 입력)');
       mark('stepPersona', setupState.persona); if (setupState.persona && !$('learnResult').textContent) result('learnResult', true, '학습 데이터 있음 (다시 학습 가능)');
       const groups = state.settings?.mentionGroups;
-      if (groups && groups !== 'none' && !$('groups').value) { $('groups').value = groups; mark('stepGroups', true); }
+      if (groups && groups !== 'none' && !$('groups').value) { $('groups').value = groups.split(',').join(', '); mark('stepGroups', true); }
       $('startApp').disabled = !(setupState.claude.ok && setupState.tokens && setupState.persona);
       $('startApp').textContent = setupState.running ? '닫기' : '시작하기';
       return setupState;
@@ -1140,8 +1144,10 @@
       finally { loadSetup(); }
     };
     $('saveGroups').onclick = async () => {
-      const v = $('groups').value.replace(/\s+/g, '') || 'none';
-      try { await api.setSetting('mentionGroups', v); result('groupsResult', true, '저장됨'); mark('stepGroups', v !== 'none'); }
+      // 쉼표·공백·줄바꿈 어느 것으로 나눠도 된다. 공백만 지우면 "S1 S2"가 S1S2 한 개로 붙어 버린다
+      const ids = $('groups').value.split(/[\s,，、;]+/).filter(Boolean);
+      const v = ids.join(',') || 'none';
+      try { await api.setSetting('mentionGroups', v); result('groupsResult', true, ids.length ? `저장됨 (${ids.length}개)` : '저장됨 (없음)'); mark('stepGroups', v !== 'none'); }
       catch (err) { result('groupsResult', false, errText(err)); }
     };
     $('startApp').onclick = async () => {
