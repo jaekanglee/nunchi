@@ -1,6 +1,6 @@
 // 이벤트 → 감시 등록 → (판단 대기) → 초안 생성 → 정책 결정 → 승인 큐 / 알림 / 자동 전송
 import type { WebClient } from '@slack/web-api';
-import { addressedToOthersOnly, isUrgent, route, threadKey, type MessageEvent } from './slack/router.js';
+import { addressedToOthersOnly, isUrgent, joinsThread, route, threadKey, type MessageEvent } from './slack/router.js';
 import { parsePermalink } from './slack/permalink.js';
 import { conversationTitle, participantNames, type ConversationReader } from './slack/conversation.js';
 import fs from 'node:fs';
@@ -444,6 +444,15 @@ export function createEngine(deps: EngineDeps) {
         store.supersedeOpen(key);
         store.touchWatch(key);
         deps.onChange();
+        return;
+      }
+      // 감시하지 않던 스레드에 내가 답글을 달면 그때부터 감시한다. 내 말이 마지막이라 지금 판단할 것은 없고,
+      // 대화를 한 번 읽어 목록의 제목·참여자만 채운다 (process는 마지막이 내 말이면 LLM 없이 끝난다)
+      if (joinsThread(e, myUserId) && store.getSetting('autoDetect', 'on') === 'on') {
+        const { channel, rootTs } = splitKey(key);
+        store.addWatch(key, channel, rootTs, 'my_reply');
+        deps.onChange();
+        void process(key);
         return;
       }
       const reason = route(e, myUserId, {

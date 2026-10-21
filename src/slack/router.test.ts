@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { addressedToOthersOnly, extractMentions, findKeyword, isUrgent, mentionsGroup, route, threadKey, type MessageEvent } from './router.js';
+import { addressedToOthersOnly, extractMentions, findKeyword, isUrgent, joinsThread, mentionsGroup, route, threadKey, type MessageEvent } from './router.js';
 
 const ME = 'UME';
 const base: MessageEvent = { type: 'message', channel: 'C1', user: 'UOTHER', text: 'hi', ts: '1.0' };
@@ -121,4 +121,14 @@ test('채널 메시지에 내 프로젝트 키워드가 나오면 keyword. 나�
   assert.equal(route({ ...base, channel_type: 'channel', text: '쇼핑몰', user: ME }, ME, opts), null);
   assert.equal(route({ ...base, channel_type: 'channel', text: '쇼핑몰' }, ME, { ...opts, autoDetect: false }), null);
   assert.equal(route({ ...base, channel_type: 'channel', text: '배포 공지' }, ME, opts), null);
+});
+
+test('joinsThread: 감시 밖 스레드에 내가 단 답글. 채널 원글·DM·남의 글·편집 등은 아니다', () => {
+  const mine = { ...base, channel_type: 'channel', user: ME, ts: '2.0', thread_ts: '1.0' };
+  assert.equal(joinsThread(mine, ME), true);
+  assert.equal(joinsThread({ ...mine, thread_ts: undefined }, ME), false); // 채널에 쓴 원글 (답글은 my_thread로 잡힌다)
+  assert.equal(joinsThread({ ...mine, thread_ts: '2.0' }, ME), false); // 스레드 원글 자신
+  assert.equal(joinsThread({ ...mine, user: 'UOTHER' }, ME), false);
+  assert.equal(joinsThread({ ...mine, channel_type: 'im' }, ME), false);
+  assert.equal(joinsThread({ ...mine, subtype: 'message_changed' }, ME), false);
 });

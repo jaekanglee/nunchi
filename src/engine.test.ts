@@ -463,3 +463,39 @@ test('키워드로 감지한 대화는 나를 부른 게 아니라서, 자동 �
   assert.equal(d.status, 'pending');
   assert.match(d.hold_reason!, /키워드로 감지한 대화/);
 });
+
+test('감시하지 않던 스레드에 내가 답글을 달면 그때부터 감시한다. 내 말이 마지막이라 바로 판단하지는 않는다', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: 1_700_000_000_000 });
+  const root = '1700000000.000100';
+  const thread = { current: [said(root, 'UA'), said('1700000001.000000', 'UME')] };
+  const { store, engine, judged, drafted } = liveSetup(thread);
+  const reply = (ts: string, user: string) => ({ type: 'message', channel: 'C1', channel_type: 'channel', user, text: ts, ts, thread_ts: root });
+  await engine.handleEvent(reply('1700000001.000000', 'UME'));
+  await flush();
+  assert.equal(store.getWatch(KEY)?.source, 'my_reply');
+  assert.ok(store.getWatch(KEY)?.participants); // 목록에 보일 참여자·제목을 채운다
+  assert.equal(engine.timers().judge[KEY], undefined);
+  assert.equal(judged.length + drafted.length, 0);
+
+  // 그 뒤 다른 사람 답글은 멘션이 없어도 감시 중인 스레드로 판단한다
+  thread.current = [...thread.current, said('1700000002.000000', 'UB')];
+  await engine.handleEvent(reply('1700000002.000000', 'UB'));
+  t.mock.timers.tick(120_000);
+  await flush();
+  assert.equal(judged.length, 1);
+});
+
+test('내 답글로 감시를 시작하는 것도 자동 감지가 꺼져 있거나 보관·삭제한 대화면 하지 않는다', async () => {
+  const root = '1700000000.000100';
+  const { store, engine } = liveSetup({ current: [said(root, 'UA'), said('1700000001.000000', 'UME')] });
+  const reply = { type: 'message', channel: 'C1', channel_type: 'channel', user: 'UME', text: '넵', ts: '1700000001.000000', thread_ts: root };
+  store.setSetting('autoDetect', 'off');
+  await engine.handleEvent(reply);
+  assert.equal(store.getWatch(KEY), undefined);
+  store.setSetting('autoDetect', 'on');
+  store.addWatch(KEY, 'C1', root, 'mention');
+  store.archiveWatch(KEY);
+  await engine.handleEvent(reply);
+  assert.equal(store.getWatch(KEY)?.source, 'mention');
+  assert.ok(store.isBlocked(KEY));
+});

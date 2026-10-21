@@ -13,7 +13,8 @@ export type MessageEvent = {
   parent_user_id?: string; // 스레드 답글이면 원글 작성자
 };
 
-export type RouteReason = 'dm' | 'group_dm' | 'mention' | 'group_mention' | 'my_thread' | 'keyword' | 'watched';
+// my_reply는 route가 아니라 joinsThread로 정한다 (내 메시지라서)
+export type RouteReason = 'dm' | 'group_dm' | 'mention' | 'group_mention' | 'my_thread' | 'keyword' | 'watched' | 'my_reply';
 
 // <!subteam^S123> 또는 <!subteam^S123|@handle>
 export function mentionsGroup(text: string | undefined, groupIds: string[]): boolean {
@@ -62,6 +63,13 @@ export function route(
   // 내 프로젝트 키워드가 나온 채널 메시지. 나를 부르지 않아도 감시에 올리고, 내 담당인지는 1차 판단이 가린다
   if (findKeyword(event.text, opts.keywords ?? [])) return 'keyword';
   return null;
+}
+
+// 감시하지 않던 채널 스레드에 내가 단 답글. 이때부터 그 스레드를 감시한다 (내 원글의 답글은 my_thread가 잡는다)
+export function joinsThread(event: MessageEvent, myUserId: string): boolean {
+  if (event.subtype !== undefined || event.user !== myUserId) return false;
+  if (event.channel_type === 'im' || event.channel_type === 'mpim') return false;
+  return event.thread_ts !== undefined && event.thread_ts !== event.ts;
 }
 
 // 원본 텍스트의 멘션 ID: <@U123> → U123, <!subteam^S123|…> → S123, <!here> → !here
