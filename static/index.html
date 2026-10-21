@@ -1259,7 +1259,8 @@
     document.addEventListener('keydown', (e) => {
       if (e.key !== 'Escape') return;
       if (!$('archive').hidden) $('archive').hidden = true;
-      else if (!$('guide').hidden || !$('setup').hidden) return;
+      else if (!$('guide').hidden) $('guide').hidden = true;
+      else if (!$('setup').hidden) { if (setupState.running) $('setup').hidden = true; } // 첫 설정 중엔 닫을 수 없다
       else if ($('settingsMain').hidden) showPane('settingsMain');
       else $('settings').hidden = true;
     });
