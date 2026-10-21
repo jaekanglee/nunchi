@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { addressedToOthersOnly, extractMentions, isUrgent, mentionsGroup, route, threadKey, type MessageEvent } from './router.js';
+import { addressedToOthersOnly, extractMentions, findKeyword, isUrgent, mentionsGroup, route, threadKey, type MessageEvent } from './router.js';
 
 const ME = 'UME';
 const base: MessageEvent = { type: 'message', channel: 'C1', user: 'UOTHER', text: 'hi', ts: '1.0' };
@@ -99,4 +99,26 @@ test('isUrgent: DM과 나를 부른 메시지만 급함', () => {
   assert.equal(isUrgent({ channel_type: 'channel', text: '<!subteam^S0GROUP0001> 확인' }, ME, ['S0GROUP0001']), true);
   assert.equal(isUrgent({ channel_type: 'channel', text: '<@UA> 확인' }, ME, []), false);
   assert.equal(isUrgent({ channel_type: 'channel', text: 'ㅋㅋ' }, ME, []), false);
+});
+
+test('findKeyword: 영문·숫자 키워드는 단어 경계에서만, 한글 키워드는 붙여 써도 찾는다 (대소문자 무시)', () => {
+  const kws = ['app', 'shop-api', '쇼핑몰'];
+  assert.equal(findKeyword('happy 하네요', kws), undefined);
+  assert.equal(findKeyword('APP 설치가 안 돼요', kws), 'app');
+  assert.equal(findKeyword('shop-api에서 500 나요', kws), 'shop-api');
+  assert.equal(findKeyword('<https://git.example.com/acme/shop-api/pull/3|PR>', kws), 'shop-api');
+  assert.equal(findKeyword('쇼핑몰앱 결제 오류', kws), '쇼핑몰');
+  assert.equal(findKeyword('mshop-apix', kws), undefined);
+  assert.equal(findKeyword(undefined, kws), undefined);
+});
+
+test('채널 메시지에 내 프로젝트 키워드가 나오면 keyword. 나를 부른 경우·DM이 먼저이고, 자동 감지가 꺼져 있으면 무시', () => {
+  const opts = { ...auto, keywords: ['쇼핑몰'] };
+  assert.equal(route({ ...base, channel_type: 'channel', text: '쇼핑몰 결제가 안 돼요' }, ME, opts), 'keyword');
+  assert.equal(route({ ...base, channel_type: 'channel', text: '쇼핑몰 답글', thread_ts: '0.5' }, ME, opts), 'keyword');
+  assert.equal(route({ ...base, channel_type: 'channel', text: `<@${ME}> 쇼핑몰` }, ME, opts), 'mention');
+  assert.equal(route({ ...base, channel_type: 'im', text: '쇼핑몰' }, ME, opts), 'dm');
+  assert.equal(route({ ...base, channel_type: 'channel', text: '쇼핑몰', user: ME }, ME, opts), null);
+  assert.equal(route({ ...base, channel_type: 'channel', text: '쇼핑몰' }, ME, { ...opts, autoDetect: false }), null);
+  assert.equal(route({ ...base, channel_type: 'channel', text: '배포 공지' }, ME, opts), null);
 });

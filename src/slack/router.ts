@@ -13,11 +13,22 @@ export type MessageEvent = {
   parent_user_id?: string; // 스레드 답글이면 원글 작성자
 };
 
-export type RouteReason = 'dm' | 'group_dm' | 'mention' | 'group_mention' | 'my_thread' | 'watched';
+export type RouteReason = 'dm' | 'group_dm' | 'mention' | 'group_mention' | 'my_thread' | 'keyword' | 'watched';
 
 // <!subteam^S123> 또는 <!subteam^S123|@handle>
 export function mentionsGroup(text: string | undefined, groupIds: string[]): boolean {
   return groupIds.some((id) => new RegExp(`<!subteam\\^${id}[>|]`).test(text ?? ''));
+}
+
+// 영문 키워드는 단어 경계에서만 찾는다 (app이 happy에 걸리지 않게). 한글은 붙여 써도 찾는다 (쇼핑몰앱 → 쇼핑몰)
+export function findKeyword(text: string | undefined, keywords: string[]): string | undefined {
+  const t = (text ?? '').toLowerCase();
+  return keywords.find((k) => {
+    const kw = k.toLowerCase();
+    if (!/^[\x20-\x7e]+$/.test(kw)) return t.includes(kw);
+    const esc = kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return new RegExp(`(^|[^a-z0-9])${esc}($|[^a-z0-9])`).test(t);
+  });
 }
 
 // 메시지가 속한 대화 단위 키. 스레드면 루트 ts, DM이면 채널 자체
@@ -30,7 +41,7 @@ export function threadKey(event: Pick<MessageEvent, 'channel' | 'channel_type' |
 export function route(
   event: MessageEvent,
   myUserId: string,
-  opts: { autoDetect: boolean; isWatched: (key: string) => boolean; mentionGroups?: string[] },
+  opts: { autoDetect: boolean; isWatched: (key: string) => boolean; mentionGroups?: string[]; keywords?: string[] },
 ): RouteReason | null {
   // 일반 메시지만 처리 (편집·삭제·입퇴장 등 subtype 제외)
   if (event.subtype !== undefined) return null;
@@ -48,6 +59,8 @@ export function route(
   if (mentionsGroup(event.text, opts.mentionGroups ?? [])) return 'group_mention';
   // 내가 쓴 글에 달린 답글. 앱을 켜기 전에 쓴 글이어도 Slack이 원글 작성자를 알려준다
   if (event.thread_ts && event.parent_user_id === myUserId) return 'my_thread';
+  // 내 프로젝트 키워드가 나온 채널 메시지. 나를 부르지 않아도 감시에 올리고, 내 담당인지는 1차 판단이 가린다
+  if (findKeyword(event.text, opts.keywords ?? [])) return 'keyword';
   return null;
 }
 

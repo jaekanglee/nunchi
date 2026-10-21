@@ -73,7 +73,7 @@ async function replayRow(
       try {
         const r = await judgeTurn(thread, ctx.persona, ctx.myUserId, { model: ctx.judgeModel, effort: arm.effort }, {
           system: PROMPTS[arm.prompt],
-          myScope: usesMyScope(arm.prompt) ? ctx.myScope : undefined,
+          scope: usesMyScope(arm.prompt) ? ctx.myScope : undefined,
         });
         outcome = { needs: r.output.needs_my_reply, costUsd: r.costUsd, usage: r.usage };
         break;

@@ -217,6 +217,17 @@
     #settings input.input { flex: none; border: 1px solid var(--line); background: var(--bg); border-radius: 8px; padding: 6px 10px; font: inherit; font-size: 13px; color: var(--text); outline: none; }
     #settings input.input::placeholder { color: var(--sub); opacity: 1; }
     #settings input.input:focus { border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-soft); }
+    #settings .menu { display: flex; align-items: center; justify-content: space-between; gap: 12px; cursor: pointer; }
+    #settings .menu:hover, #settings .menu:focus-visible { border-color: var(--brand); outline: none; }
+    #settings .menu h3 { margin-bottom: 4px; }
+    #settings .menu .chev { font-size: 22px; color: var(--sub); flex: none; }
+    #settings .proj { border-top: 1px solid var(--line); padding-bottom: 10px; }
+    #settings .proj .srow { border-top: none; padding-bottom: 6px; }
+    #settings .kwrow { display: flex; align-items: center; gap: 8px; }
+    #settings .kwrow > span { flex: none; font-size: 12px; font-weight: 600; color: var(--sub); }
+    #settings .kwrow input.input { flex: 1; min-width: 0; }
+    #settings .kwnote { display: block; color: var(--sub); font-size: 12px; margin: 4px 0 0 44px; }
+    #settings .kwnote a { color: var(--brand); cursor: pointer; text-decoration: underline; }
     .settings-btn { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; }
     .settings-btn .gear { font-size: 16px; line-height: 1; }
     #setup { position: fixed; inset: 0; z-index: 10; background: var(--bg); overflow: auto; padding: 56px 24px 40px; -webkit-app-region: drag; }
@@ -330,17 +341,12 @@
   <div id="toast" class="toast" hidden></div>
 
   <div id="settings" hidden>
-    <div class="wrap">
+    <div class="wrap" id="settingsMain">
       <div class="settings-head"><h1>설정</h1><button id="closeSettings" class="btn">닫기</button></div>
 
-      <div class="card step">
-        <h3>모델</h3>
-        <div class="hint">답장·요약은 이 컴퓨터의 Claude Code로 만듭니다. 대화마다 다르게 하려면 대화 상세 위의 "이 대화 모델"을 쓰세요.</div>
-        <div class="srow"><div><b>기본 모델</b><small>내 차례 판단(DM)과 답장 초안을 씁니다</small></div><select id="model" class="input"></select></div>
-        <div class="srow"><div><b>1차 판단</b><small>채널 스레드는 이 모델이 먼저 "내 차례인지"만 보고, 내 차례일 때만 기본 모델이 초안을 씁니다. 싼 모델일수록 비용이 줄어듭니다</small></div><select id="judgeModel" class="input"></select></div>
-        <div class="srow"><div><b>코드 탐색</b><small>'코드 보고 다시 쓰기'에서 코드를 찾는 모델입니다. 답장은 기본 모델이 씁니다</small></div><select id="codeModel" class="input"></select></div>
-        <div class="srow"><div><b>초안 effort</b><small>판단·초안을 얼마나 깊게 생각할지</small></div><select id="draftEffort" class="input"></select></div>
-        <div class="srow"><div><b>요약 effort</b><small>요약을 얼마나 깊게 생각할지</small></div><select id="summaryEffort" class="input"></select></div>
+      <div class="card step menu" id="openAi" role="button" tabindex="0">
+        <div><h3>AI 설정</h3><div class="hint">담당 업무 · 내 프로젝트(키워드) · 내 지침 · 모델</div><div class="hint" id="aiSummary" style="margin-top:4px"></div></div>
+        <span class="chev">›</span>
       </div>
 
       <div class="card step">
@@ -375,9 +381,33 @@
       </div>
 
       <div class="card step">
+        <h3>광고 배너</h3>
+        <div class="hint">사이드바 맨 아래에 띄울 광고 페이지 주소(https)입니다. 광고 페이지는 앱과 분리된 창(iframe)에서 열려 Slack 토큰이나 메시지에 접근할 수 없고, 광고를 누르면 기본 브라우저로 열립니다. 비우면 배너를 숨깁니다.</div>
+        <div class="srow"><div><b>광고 페이지 주소</b><small>예: https://내도메인/nunchi-ad.html</small></div><input id="adUrl" class="input" placeholder="https://…" style="width:280px" /></div>
+      </div>
+
+      <div class="card step">
+        <h3>원격 제어</h3>
+        <div class="hint">밖에서는 SSH로 들어와 저장소 폴더에서 <code>npm run ctl -- status</code>, <code>pause</code>, <code>set model …</code> 등으로 같은 설정을 바꿀 수 있습니다.</div>
+      </div>
+    </div>
+
+    <div class="wrap" id="settingsAi" hidden>
+      <div class="settings-head"><h1>AI 설정</h1><button id="closeAi" class="btn">← 설정으로 돌아가기</button></div>
+      <div class="hint" style="margin:-8px 0 14px">Claude가 내 차례인지 판단하고 답장을 쓸 때 읽는 근거와 모델입니다. 근거는 내 Slack 메시지로 학습한 내용, 내가 등록한 프로젝트, 내가 쓴 지침입니다.</div>
+
+      <div class="card step">
         <h3>내 담당 업무</h3>
-        <div class="hint">1차 판단과 초안이 내 담당과 무관한 대화를 거를 때 씁니다. 비워 두면 말투 분석이 뽑은 값을 씁니다.</div>
+        <div class="hint">1차 판단과 초안이 내 담당과 무관한 대화를 거를 때 씁니다. 비워 두면 내 Slack 메시지로 말투를 학습할 때 뽑은 값을 씁니다.</div>
         <div class="srow"><div><b>담당 업무</b><small id="myScopeAuto"></small></div><input id="myScope" class="input" maxlength="300" style="width:280px" /></div>
+      </div>
+
+      <div class="card step">
+        <h3>내 프로젝트</h3>
+        <div class="hint">내가 맡은 프로젝트 폴더입니다. <b>키워드</b>는 두 곳에 씁니다. 나를 부르지 않아도 내가 있는 채널에 키워드가 나오면 대화를 감시에 올리고(이런 대화는 자동 전송하지 않습니다), 1차 판단과 초안이 내 담당인지 가릴 때 근거로 읽습니다. 너무 흔한 단어는 빼 두세요. 키워드는 폴더 이름·package.json·pubspec.yaml·README 제목에서 자동으로 뽑고, 쉼표로 나눠 고칠 수 있습니다.</div>
+        <div class="hint" style="margin-top:6px">초안의 '코드 보고 다시 쓰기'를 누르면 이 폴더들의 코드를 읽고 답장을 다시 씁니다. 코드는 읽기만 하고 .env·키 파일은 읽지 않습니다. 확인한 내용은 노트로 남겨 다음에 먼저 찾아보고, 코드로 확인한 내용이 들어간 초안은 자동 전송하지 않습니다.</div>
+        <div id="projectDirs"></div>
+        <div class="row" style="margin-top:10px"><button id="addProjectDir" class="btn">폴더 추가</button><span class="hint" id="codeNotes" style="margin-left:auto"></span><button id="openNotes" class="btn ghost">노트 폴더 열기</button></div>
       </div>
 
       <div class="card step">
@@ -387,21 +417,13 @@
       </div>
 
       <div class="card step">
-        <h3>프로젝트 폴더</h3>
-        <div class="hint">초안의 '코드 보고 다시 쓰기'를 누르면 이 폴더들의 코드를 읽고 답장을 다시 씁니다. 코드는 읽기만 하고 .env·키 파일은 읽지 않습니다. 확인한 내용은 노트로 남겨 다음에 먼저 찾아보고, 코드로 확인한 내용이 들어간 초안은 자동 전송하지 않습니다.</div>
-        <div id="projectDirs"></div>
-        <div class="row" style="margin-top:10px"><button id="addProjectDir" class="btn">폴더 추가</button><span class="hint" id="codeNotes" style="margin-left:auto"></span><button id="openNotes" class="btn ghost">노트 폴더 열기</button></div>
-      </div>
-
-      <div class="card step">
-        <h3>광고 배너</h3>
-        <div class="hint">사이드바 맨 아래에 띄울 광고 페이지 주소(https)입니다. 광고 페이지는 앱과 분리된 창(iframe)에서 열려 Slack 토큰이나 메시지에 접근할 수 없고, 광고를 누르면 기본 브라우저로 열립니다. 비우면 배너를 숨깁니다.</div>
-        <div class="srow"><div><b>광고 페이지 주소</b><small>예: https://내도메인/nunchi-ad.html</small></div><input id="adUrl" class="input" placeholder="https://…" style="width:280px" /></div>
-      </div>
-
-      <div class="card step">
-        <h3>원격 제어</h3>
-        <div class="hint">밖에서는 SSH로 들어와 저장소 폴더에서 <code>npm run ctl -- status</code>, <code>pause</code>, <code>set model …</code> 등으로 같은 설정을 바꿀 수 있습니다.</div>
+        <h3>모델</h3>
+        <div class="hint">답장·요약은 이 컴퓨터의 Claude Code로 만듭니다. 대화마다 다르게 하려면 대화 상세 위의 "이 대화 모델"을 쓰세요.</div>
+        <div class="srow"><div><b>기본 모델</b><small>내 차례 판단(DM)과 답장 초안을 씁니다</small></div><select id="model" class="input"></select></div>
+        <div class="srow"><div><b>1차 판단</b><small>채널 스레드는 이 모델이 먼저 "내 차례인지"만 보고, 내 차례일 때만 기본 모델이 초안을 씁니다. 싼 모델일수록 비용이 줄어듭니다</small></div><select id="judgeModel" class="input"></select></div>
+        <div class="srow"><div><b>코드 탐색</b><small>'코드 보고 다시 쓰기'에서 코드를 찾는 모델입니다. 답장은 기본 모델이 씁니다</small></div><select id="codeModel" class="input"></select></div>
+        <div class="srow"><div><b>초안 effort</b><small>판단·초안을 얼마나 깊게 생각할지</small></div><select id="draftEffort" class="input"></select></div>
+        <div class="srow"><div><b>요약 effort</b><small>요약을 얼마나 깊게 생각할지</small></div><select id="summaryEffort" class="input"></select></div>
       </div>
     </div>
   </div>
@@ -690,7 +712,7 @@
       // 설정한 프로젝트 폴더의 코드를 읽고 다시 쓴다. 다시 쓰는 동안은 로딩으로 보인다
       const recode = isBusy('drafting', d.key)
         ? loadingButton('초안 쓰는 중…', 'btn ghost')
-        : el('button', { className: 'btn ghost', textContent: '🔎 코드 보고 다시 쓰기', title: '설정의 프로젝트 폴더에서 코드를 읽고 초안을 다시 씁니다 (1~3분)' });
+        : el('button', { className: 'btn ghost', textContent: '🔎 코드 보고 다시 쓰기', title: 'AI 설정의 내 프로젝트 폴더에서 코드를 읽고 초안을 다시 씁니다 (1~3분)' });
       recode.style.marginRight = 'auto';
       recode.onclick = () => act(recode, '코드 읽는 중… (1~3분)', async () => {
         await api.requestDraft(d.key, '', true);
@@ -943,10 +965,11 @@
       if (document.activeElement !== $('adUrl')) $('adUrl').value = state.settings.adUrl === 'none' ? '' : state.settings.adUrl;
       renderAd(state.settings.adUrl);
       if (document.activeElement !== $('myScope')) $('myScope').value = state.settings.myScope === 'none' ? '' : state.settings.myScope;
-      $('myScope').placeholder = state.autoScope || '예: 배송앱·관리자 웹';
+      $('myScope').placeholder = state.autoScope || '예: 고객 문의 대응·결제 시스템';
       if (document.activeElement !== $('myGuide')) $('myGuide').value = state.settings.myGuide === 'none' ? '' : state.settings.myGuide;
       $('myScopeAuto').textContent = state.autoScope ? `비우면 자동: ${state.autoScope}` : '자동 값 없음 (말투 분석을 다시 하면 생깁니다)';
       renderProjectDirs();
+      renderAiSummary();
       $('codeNotes').textContent = `코드 노트 ${state.codeNotes ?? 0}개`;
       const autoCats = state.settings.autoCategories === 'none' ? [] : state.settings.autoCategories.split(',');
       $('autoCategories').replaceChildren(...state.autoEligible.map((c) => el('label', { className: 'opt' },
@@ -997,7 +1020,7 @@
     }
     const showSetup = async () => { $('setup').hidden = false; await loadSetup(); };
     $('openSetup').onclick = showSetup;
-    $('openSettings').onclick = () => ($('settings').hidden = false);
+    $('openSettings').onclick = () => { showAi(false); $('settings').hidden = false; };
     // 타이밍 설정: 값을 바꾸면 바로 저장. 범위를 벗어나면 토스트로 알리고 원래 값으로
     const TIMING = ['urgentDelaySec', 'batchDelaySec', 'autoSendMinSec', 'autoSendMaxSec', 'autoMaxRisk', 'autoMinConfidence', 'escalateRisk'];
     // 광고는 sandbox iframe: 스크립트는 돌지만 앱 화면(window.nunchi)에는 닿지 못하고, 앱 창을 이동시킬 수 없다
@@ -1026,13 +1049,57 @@
     // 코드 보고 다시 쓰기가 읽을 폴더. 설정값은 줄바꿈으로 나눈 절대 경로 (없으면 none)
     const projectDirs = () => (state.settings.projectDirs === 'none' ? [] : state.settings.projectDirs.split('\n'));
     const saveProjectDirs = (dirs) => api.setSetting('projectDirs', dirs.join('\n') || 'none');
+    // 폴더별로 직접 고친 키워드 (JSON). null이면 자동으로 뽑은 값으로 되돌린다
+    const keywordMap = () => { try { return JSON.parse(state.settings.projectKeywords || '{}'); } catch { return {}; } };
+    async function saveKeywords(dir, keywords) {
+      const map = keywordMap();
+      if (keywords === null) delete map[dir]; else map[dir] = keywords;
+      await api.setSetting('projectKeywords', JSON.stringify(map));
+    }
     function renderProjectDirs() {
+      if ($('projectDirs').contains(document.activeElement)) return; // 키워드를 고치는 중이면 다시 그리지 않는다
       const dirs = projectDirs();
+      const byDir = Object.fromEntries((state.projects ?? []).map((p) => [p.dir, p]));
       $('projectDirs').replaceChildren(...(dirs.length ? dirs.map((d) => {
-        const rm = el('button', { className: 'btn ghost', textContent: '빼기', onclick: () => act(rm, '빼는 중…', () => saveProjectDirs(dirs.filter((x) => x !== d))) });
-        return el('div', { className: 'srow' }, el('div', {}, el('b', { textContent: d.split(/[\\/]/).filter(Boolean).pop() ?? d }), el('small', { textContent: d })), rm);
+        const p = byDir[d] ?? { keywords: [], auto: true };
+        const rm = el('button', { className: 'btn ghost', textContent: '빼기', onclick: () => act(rm, '빼는 중…', async () => {
+          await saveProjectDirs(dirs.filter((x) => x !== d));
+          if (d in keywordMap()) await saveKeywords(d, null);
+        }) });
+        const kw = el('input', { className: 'input', value: p.keywords.join(', '), placeholder: '키워드 없음 (감지·판단에 쓰지 않음)' });
+        kw.onchange = async () => {
+          try { await saveKeywords(d, kw.value.split(/[,，、\n]+/).map((k) => k.trim()).filter(Boolean)); toast('저장했습니다. 다음 메시지부터 적용됩니다'); }
+          catch (err) { toast(errText(err), 'err'); kw.value = p.keywords.join(', '); }
+        };
+        const note = p.auto
+          ? el('small', { className: 'kwnote', textContent: '폴더에서 자동으로 뽑은 키워드입니다. 쉼표로 나눠 고칠 수 있습니다' })
+          : el('small', { className: 'kwnote' }, '직접 고친 키워드입니다 · ', el('a', { textContent: '자동으로 되돌리기', onclick: () => saveKeywords(d, null).catch((err) => toast(errText(err), 'err')) }));
+        return el('div', { className: 'proj' },
+          el('div', { className: 'srow' }, el('div', {}, el('b', { textContent: d.split(/[\\/]/).filter(Boolean).pop() ?? d }), el('small', { textContent: d })), rm),
+          el('div', { className: 'kwrow' }, el('span', { textContent: '키워드' }), kw),
+          note);
       }) : [el('div', { className: 'hint', textContent: '추가한 폴더가 없습니다' })]));
     }
+    // 설정 첫 화면의 AI 설정 메뉴에 지금 값을 한 줄로
+    function renderAiSummary() {
+      const s = state.settings;
+      const scope = s.myScope !== 'none' ? s.myScope : state.autoScope;
+      $('aiSummary').textContent = [
+        scope ? `담당 ${scope.length > 18 ? `${scope.slice(0, 18)}…` : scope}` : '담당 업무 없음',
+        `프로젝트 ${projectDirs().length}개`,
+        s.myGuide !== 'none' ? '지침 있음' : '지침 없음',
+        MODEL_LABEL[s.model] ?? s.model,
+      ].join(' · ');
+    }
+    // AI 설정은 설정 아래 한 단계 더 들어가는 화면
+    function showAi(on) {
+      $('settingsMain').hidden = on;
+      $('settingsAi').hidden = !on;
+      $('settings').scrollTop = 0;
+    }
+    $('openAi').onclick = () => showAi(true);
+    $('openAi').onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); showAi(true); } };
+    $('closeAi').onclick = () => showAi(false);
     $('openNotes').onclick = () => api.openNotes().catch((err) => toast(errText(err), 'err'));
     $('addProjectDir').onclick = () => act($('addProjectDir'), '고르는 중…', async () => {
       const picked = await api.pickFolders();
@@ -1084,7 +1151,9 @@
     document.addEventListener('keydown', (e) => {
       if (e.key !== 'Escape') return;
       if (!$('archive').hidden) $('archive').hidden = true;
-      else if ($('guide').hidden && $('setup').hidden) $('settings').hidden = true;
+      else if (!$('guide').hidden || !$('setup').hidden) return;
+      else if (!$('settingsAi').hidden) showAi(false);
+      else $('settings').hidden = true;
     });
     $('recheckClaude').onclick = loadSetup;
 

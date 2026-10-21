@@ -135,7 +135,7 @@ test('담당 업무: 설정이 none이면 말투 분석 값, 설정하면 그 �
     notify: () => {},
     onChange: () => {},
     judge: async (_t, _p, _me, _llm, opts): Promise<ClaudeResult<Judgment>> => {
-      seen.push(opts?.myScope);
+      seen.push(opts?.scope);
       return { output: { needs_my_reply: false, reason: 'r', topic: 't' }, costUsd: 0, usage };
     },
   });
@@ -235,7 +235,7 @@ test('코드 보고 다시 쓰기: 탐색 결과를 검증해 저장하고 노�
 
 test('코드 보고 다시 쓰기: 폴더가 없으면 LLM을 부르지 않고 알려준다', async () => {
   const { store, engine, investigated, drafted } = codeSetup();
-  await assert.rejects(engine.requestDraft(KEY, '', true), /프로젝트 폴더/);
+  await assert.rejects(engine.requestDraft(KEY, '', true), /내 프로젝트에서 폴더/);
   assert.equal(investigated.length + drafted.length, 0);
   assert.equal(store.listDraftsByKey(KEY).length, 0);
 });
@@ -282,11 +282,11 @@ test('내 지침: 설정하면 1차 판단과 초안에 넘긴다', async () => 
     notify: () => {},
     onChange: () => {},
     judge: async (_t, _p, _me, _llm, opts): Promise<ClaudeResult<Judgment>> => {
-      seen.push(`judge:${opts?.myGuide}`);
+      seen.push(`judge:${opts?.guide}`);
       return { output: { needs_my_reply: true, reason: 'r', topic: 't' }, costUsd: 0, usage };
     },
-    draft: async (_t, _p, _me, _llm, _req, _scope, _code, guide): Promise<ClaudeResult<DraftResult>> => {
-      seen.push(`draft:${guide}`);
+    draft: async (_t, _p, _me, _llm, _req, mine): Promise<ClaudeResult<DraftResult>> => {
+      seen.push(`draft:${mine?.guide}`);
       return { output: { needs_my_reply: false, category: '정보질문', risk: 10, needs_facts_i_dont_know: false, confidence: 0.9, reply: '', reason: 'r', topic: 't' }, costUsd: 0, usage };
     },
   });
@@ -400,4 +400,66 @@ test('다른 사람만 부른 메시지라도, 내 마지막 말 뒤에 나를 �
   await flush();
   assert.equal(judged.length, 1);
   assert.equal(store.listDraftsByKey(KEY).at(-1)!.category, '규칙');
+});
+
+test('내 프로젝트 키워드가 나온 채널 메시지는 감시에 올려 모아서 판단하고, 판단에 프로젝트를 넘긴다', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: 1_700_000_000_000 });
+  const dir = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'nunchi-proj-')), 'shop-app');
+  fs.mkdirSync(dir);
+  const store = openStore(':memory:');
+  const seen: unknown[] = [];
+  const client = { search: { messages: async () => ({ messages: { matches: [] } }) } } as unknown as WebClient;
+  const engine = createEngine({
+    client,
+    myUserId: 'UME',
+    store,
+    readConversation: { read: async () => [said('1700000000.000100', 'UA')], nameOf: async (u: string) => u },
+    persona: { styleGuide: 'S', relationships: [], pairs: [] },
+    notify: () => {},
+    onChange: () => {},
+    judge: async (_t, _p, _me, _llm, opts): Promise<ClaudeResult<Judgment>> => {
+      seen.push(opts?.projects);
+      return { output: { needs_my_reply: false, reason: 'r', topic: 't' }, costUsd: 0, usage };
+    },
+  });
+  store.setSetting('projectDirs', dir);
+  store.setSetting('projectKeywords', JSON.stringify({ [dir]: ['쇼핑몰'] }));
+  const event = { type: 'message', channel: 'C1', channel_type: 'channel', user: 'UA', text: '쇼핑몰 결제가 안 돼요', ts: '1700000000.000100' };
+  await engine.handleEvent(event);
+  assert.equal(store.getWatch(KEY)?.source, 'keyword');
+  assert.equal(engine.timers().judge[KEY], 1_700_000_120_000); // 나를 부른 게 아니라 모아서 판단
+  await engine.handleEvent({ ...event, ts: '1700000001.000000', text: 'shop-app 얘기' }); // 직접 고친 키워드에 없는 폴더 이름은 감지하지 않는다
+  assert.equal(store.getWatch('C1:1700000001.000000'), undefined);
+  t.mock.timers.tick(120_000);
+  await flush();
+  assert.deepEqual(seen, [[{ dir, name: 'shop-app', keywords: ['쇼핑몰'], auto: false }]]);
+});
+
+test('키워드로 감지한 대화는 나를 부른 게 아니라서, 자동 전송 조건이어도 승인 대기', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: 1_700_000_000_000 });
+  const store = openStore(':memory:');
+  const client = { search: { messages: async () => ({ messages: { matches: [] } }) } } as unknown as WebClient;
+  const engine = createEngine({
+    client,
+    myUserId: 'UME',
+    store,
+    readConversation: { read: async () => [said('1700000000.000100', 'UA'), said('1700000001.000000', 'UB')], nameOf: async (u: string) => u },
+    persona: { styleGuide: 'S', relationships: [], pairs: [] },
+    notify: () => {},
+    onChange: () => {},
+    judge: async (): Promise<ClaudeResult<Judgment>> => ({ output: { needs_my_reply: true, reason: 'r', topic: 't' }, costUsd: 0, usage }),
+    draft: async (): Promise<ClaudeResult<DraftResult>> => ({
+      output: { needs_my_reply: true, category: '단순확인·리액션', risk: 5, needs_facts_i_dont_know: false, confidence: 0.95, reply: '넵', reason: 'r', topic: 't' },
+      costUsd: 0,
+      usage,
+    }),
+  });
+  store.setSetting('sendMode', 'auto');
+  store.addWatch(KEY, 'C1', '1700000000.000100', 'keyword');
+  await engine.handleEvent({ type: 'message', channel: 'C1', channel_type: 'channel', user: 'UB', text: '그렇군요', ts: '1700000001.000000', thread_ts: '1700000000.000100' });
+  t.mock.timers.tick(120_000);
+  await flush();
+  const d = store.listDraftsByKey(KEY)[0];
+  assert.equal(d.status, 'pending');
+  assert.match(d.hold_reason!, /키워드로 감지한 대화/);
 });

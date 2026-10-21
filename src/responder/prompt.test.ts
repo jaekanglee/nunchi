@@ -46,11 +46,11 @@ test('myScope: none이면 기존 context와 같고, 값이 같으면 매번 같�
   const persona: Persona = { styleGuide: 'STYLE', relationships: [], pairs: [pair('UA', 'a1')] };
   const t = [{ ts: '1', user: 'UA', name: '서연', text: '질문' }];
   const base = buildPrompt(t, persona, 'UME');
-  assert.equal(buildPrompt(t, persona, 'UME', 'none').context, base.context);
-  const a = buildPrompt(t, persona, 'UME', '배송앱·관리자 웹');
-  assert.equal(buildPrompt(t, persona, 'UME', '배송앱·관리자 웹').context, a.context);
+  assert.equal(buildPrompt(t, persona, 'UME', { scope: 'none' }).context, base.context);
+  const a = buildPrompt(t, persona, 'UME', { scope: '배송앱·관리자 웹' });
+  assert.equal(buildPrompt(t, persona, 'UME', { scope: '배송앱·관리자 웹' }).context, a.context);
   assert.match(a.context, /STYLE\n\n# 내 담당 업무\n배송앱·관리자 웹\n\n# 이 대화 상대와의 관계/);
-  const b = buildPrompt(t, persona, 'UME', '정산');
+  const b = buildPrompt(t, persona, 'UME', { scope: '정산' });
   const strip = (s: string) => s.replace(/\n\n# 내 담당 업무\n[^\n]*/, '');
   assert.equal(strip(a.context), base.context);
   assert.equal(strip(b.context), base.context);
@@ -60,9 +60,26 @@ test('myScope: none이면 기존 context와 같고, 값이 같으면 매번 같�
 test('내 지침: none이면 기존 context와 같고, 있으면 담당 업무 다음에 여러 줄 그대로 넣는다', () => {
   const persona: Persona = { styleGuide: 'STYLE', relationships: [], pairs: [] };
   const t = [{ ts: '1', user: 'UA', name: '서연', text: '질문' }];
-  const base = buildPrompt(t, persona, 'UME', '배송앱');
-  assert.equal(buildPrompt(t, persona, 'UME', '배송앱', 'none').context, base.context);
-  const g = buildPrompt(t, persona, 'UME', '배송앱', '배포 일정은 확답하지 않는다\n금요일 오후 질문은 월요일로 미룬다');
+  const base = buildPrompt(t, persona, 'UME', { scope: '배송앱' });
+  assert.equal(buildPrompt(t, persona, 'UME', { scope: '배송앱', guide: 'none' }).context, base.context);
+  const g = buildPrompt(t, persona, 'UME', { scope: '배송앱', guide: '배포 일정은 확답하지 않는다\n금요일 오후 질문은 월요일로 미룬다' });
   assert.match(g.context, /# 내 담당 업무\n배송앱\n\n# 내 지침[^\n]*\n배포 일정은 확답하지 않는다\n금요일 오후 질문은 월요일로 미룬다\n\n# 이 대화 상대와의 관계/);
   assert.equal(g.conversation, base.conversation);
+});
+
+test('내 프로젝트: 없으면 기존 context와 같고, 있으면 담당 업무 다음에 이름·키워드를 넣는다 (경로는 넣지 않는다)', () => {
+  const persona: Persona = { styleGuide: 'STYLE', relationships: [], pairs: [] };
+  const t = [{ ts: '1', user: 'UA', name: '서연', text: '질문' }];
+  const base = buildPrompt(t, persona, 'UME', { scope: '결제' });
+  assert.equal(buildPrompt(t, persona, 'UME', { scope: '결제', projects: [] }).context, base.context);
+  const p = buildPrompt(t, persona, 'UME', {
+    scope: '결제',
+    guide: '지침',
+    projects: [
+      { dir: '/Users/me/shop-app', name: 'shop-app', keywords: ['shop-app', '쇼핑몰'], auto: true },
+      { dir: '/Users/me/batch', name: 'batch', keywords: [], auto: false },
+    ],
+  });
+  assert.match(p.context, /# 내 담당 업무\n결제\n\n# 내 프로젝트[^\n]*\n- shop-app: shop-app, 쇼핑몰\n- batch\n\n# 내 지침/);
+  assert.doesNotMatch(p.context, /\/Users\/me/);
 });

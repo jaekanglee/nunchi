@@ -11,12 +11,13 @@ import { gitHead, noteMarkdown, verifyFacts, type CodeContext, type CodeFacts } 
 import { NOTES_DIR } from './paths.js';
 import { JUDGE_EFFORT, judgeTurn } from './responder/judge.js';
 import { decide, holdReasons, type SendMode } from './responder/policy.js';
-import type { Persona } from './responder/prompt.js';
+import type { Mine, Persona } from './responder/prompt.js';
 import { editMark, planSummary, summarizeConversation } from './summary/summarize.js';
 import type { ThreadMessage } from './responder/prompt.js';
 import type { CostFields, Store } from './store/db.js';
 import { resolveLlm, type Llm, type Usage } from './llm/claude.js';
-import { SETTINGS, parseDirs, parseGroups, thresholdsFrom } from './ctl/settings.js';
+import { SETTINGS, parseDirs, parseGroups, parseKeywordMap, thresholdsFrom } from './ctl/settings.js';
+import { cachedProjects } from './projects.js';
 
 const SUMMARY_KEEP = 300; // 요약은 긴 스레드도 최근 300개까지 읽는다
 const LLM_CONCURRENCY = 2; // claude -p 하나가 수백 MB를 쓴다 (실측 약 260MB). 여러 대화가 한꺼번에 와도 이만큼만 띄운다
@@ -157,7 +158,10 @@ export function createEngine(deps: EngineDeps) {
   const ms = (key: string) => Number(setting(key)) * 1000;
   // 설정으로 덮어쓰지 않았으면 말투 분석이 뽑은 담당 업무를 쓴다
   const myScope = () => (setting('myScope') !== 'none' ? setting('myScope') : (deps.persona.myScope ?? 'none'));
-  const myGuide = () => setting('myGuide');
+  // 등록한 프로젝트와 키워드 (직접 고친 값이 없으면 폴더에서 뽑은 값)
+  const projects = () => cachedProjects(parseDirs(setting('projectDirs')), parseKeywordMap(setting('projectKeywords')));
+  // 판단·초안이 함께 읽는 내 근거: 담당 업무, 프로젝트, 지침
+  const mine = (): Mine => ({ scope: myScope(), guide: setting('myGuide'), projects: projects() });
   // 자동 전송 기준도 판단할 때마다 읽어서 바로 반영
   const thresholds = () => thresholdsFrom(setting);
 
@@ -235,7 +239,7 @@ export function createEngine(deps: EngineDeps) {
       const main = llmFor(key, 'draft');
       let judgeCost: number | null = null;
       if (rootTs !== null && judgeModel !== 'off' && judgeModel !== main.model) {
-        const judged = await judge(thread, deps.persona, myUserId, { model: judgeModel, effort: JUDGE_EFFORT }, { myScope: myScope(), myGuide: myGuide() });
+        const judged = await judge(thread, deps.persona, myUserId, { model: judgeModel, effort: JUDGE_EFFORT }, mine());
         if (gone(key)) return;
         const j = judged.output;
         judgeCost = judged.costUsd;
@@ -244,19 +248,22 @@ export function createEngine(deps: EngineDeps) {
       }
 
       const code = codeFor(key, thread);
-      const drafted = await draft(thread, deps.persona, myUserId, main, undefined, myScope(), code, myGuide());
+      const drafted = await draft(thread, deps.persona, myUserId, main, undefined, mine(), code);
       const result = drafted.output;
       if (gone(key)) return;
       const sendMode: SendMode = watch.mode === 'draft' ? 'draft' : (store.getSetting('sendMode', 'draft') as SendMode);
       const t = thresholds();
       let decision = decide(result, sendMode, t);
       // 코드로 확인한 내용은 체크아웃된 브랜치 기준이라 배포 버전과 다를 수 있다. 자동으로 보내지 않는다
-      if (code && decision === 'auto') decision = 'approve';
+      // 키워드로 감지한 대화도 나를 부른 게 아니라 끼어드는 답장이 되므로 자동으로 보내지 않는다
+      const byKeyword = watch.source === 'keyword';
+      if ((code || byKeyword) && decision === 'auto') decision = 'approve';
       store.setWatchTopic(key, result.topic, true);
       // 대화별 '초안만'과 전역 초안 모드를 구분해서 보여준다
       const hold = [
         ...holdReasons(result, sendMode, t).map((r) => (r === '전송 설정이 초안 모드' && watch.mode === 'draft' ? "이 대화가 '초안만'" : r)),
         ...(code ? ['코드로 확인한 내용 포함', ...unverified(code)] : []),
+        ...(byKeyword ? ['키워드로 감지한 대화'] : []),
       ];
 
       store.supersedeOpen(key);
@@ -367,13 +374,13 @@ export function createEngine(deps: EngineDeps) {
     const w = store.getWatch(key);
     if (!w) throw new Error('감시 중인 대화가 아닙니다');
     const dirs = withCode ? parseDirs(setting('projectDirs')) : undefined;
-    if (dirs?.length === 0) throw new Error('설정에서 프로젝트 폴더를 먼저 추가하세요');
+    if (dirs?.length === 0) throw new Error('설정 → AI 설정 → 내 프로젝트에서 폴더를 먼저 추가하세요');
     const thread = await read(w.channel, w.root_ts);
     remember(key, thread, w.root_ts === null);
     const last = thread.at(-1);
     if (!last) throw new Error('대화에 메시지가 없습니다');
     const code = dirs ? await lookIntoCode(key, thread, dirs) : codeFor(key, thread);
-    const drafted = await draft(thread, deps.persona, myUserId, llmFor(key, 'draft'), hint, myScope(), code, myGuide());
+    const drafted = await draft(thread, deps.persona, myUserId, llmFor(key, 'draft'), hint, mine(), code);
     const result = drafted.output;
     if (!result.reply) throw new Error('초안을 만들지 못했습니다');
     const t = thresholds();
@@ -443,6 +450,7 @@ export function createEngine(deps: EngineDeps) {
         autoDetect: store.getSetting('autoDetect', 'on') === 'on',
         isWatched: (k) => store.isWatched(k),
         mentionGroups: parseGroups(store.getSetting('mentionGroups', 'none')),
+        keywords: projects().flatMap((p) => p.keywords),
       });
       if (!reason) return;
       const { channel, rootTs } = splitKey(key);
