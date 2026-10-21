@@ -499,3 +499,40 @@ test('내 답글로 감시를 시작하는 것도 자동 감지가 꺼져 있거
   assert.equal(store.getWatch(KEY)?.source, 'mention');
   assert.ok(store.isBlocked(KEY));
 });
+
+for (const [name, channel, channelType, label] of [['DM', 'D1', 'im', 'DM'], ['그룹 DM', 'G1', 'mpim', '그룹 DM']] as const) {
+  test(`자동 전송할 대화에서 뺀 ${name}은 자동 전송 조건이어도 승인 대기, 넣으면 자동 전송 예약`, async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: 1_700_000_000_000 });
+    const store = openStore(':memory:');
+    const client = { search: { messages: async () => ({ messages: { matches: [] } }) } } as unknown as WebClient;
+    const engine = createEngine({
+      client,
+      myUserId: 'UME',
+      store,
+      readConversation: { read: async () => [said('1700000000.000100', 'UA')], nameOf: async (u: string) => u },
+      persona: { styleGuide: 'S', relationships: [], pairs: [] },
+      notify: () => {},
+      onChange: () => {},
+      draft: async (): Promise<ClaudeResult<DraftResult>> => ({
+        output: { needs_my_reply: true, category: '인사/잡담', risk: 5, needs_facts_i_dont_know: false, confidence: 0.95, reply: '안녕하세요', reason: 'r', topic: 't' },
+        costUsd: 0,
+        usage,
+      }),
+    });
+    store.setSetting('sendMode', 'auto');
+    const key = `${channel}:dm`;
+    const event = { type: 'message', channel, channel_type: channelType, user: 'UA', text: '안녕하세요', ts: '1700000000.000100' };
+    const run = async () => {
+      await engine.handleEvent(event);
+      t.mock.timers.tick(10_000);
+      await flush();
+      return store.listDraftsByKey(key).at(-1)!;
+    };
+    store.setSetting('autoTargets', 'channel');
+    const held = await run();
+    assert.equal(held.status, 'pending');
+    assert.match(held.hold_reason!, new RegExp(`${label}은 자동 전송 안 함`));
+    store.setSetting('autoTargets', 'dm,group_dm,channel');
+    assert.equal((await run()).status, 'scheduled');
+  });
+}

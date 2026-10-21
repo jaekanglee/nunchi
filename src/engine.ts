@@ -16,7 +16,7 @@ import { editMark, planSummary, summarizeConversation } from './summary/summariz
 import type { ThreadMessage } from './responder/prompt.js';
 import type { CostFields, Store } from './store/db.js';
 import { resolveLlm, type Llm, type Usage } from './llm/claude.js';
-import { SETTINGS, parseDirs, parseGroups, parseKeywordMap, thresholdsFrom } from './ctl/settings.js';
+import { SETTINGS, parseDirs, parseGroups, parseKeywordMap, parseList, thresholdsFrom } from './ctl/settings.js';
 import { cachedProjects } from './projects.js';
 
 const SUMMARY_KEEP = 300; // 요약은 긴 스레드도 최근 300개까지 읽는다
@@ -67,6 +67,13 @@ export type EngineDeps = {
   investigate?: typeof investigate;
   notesDir?: string;
 };
+
+// 대화 종류 (자동 전송할 대화 설정). DM 채널 ID는 D로 시작하고, 그룹 DM은 스레드가 아니라 대화 전체가 한 키다
+function conversationKind(channel: string, rootTs: string | null): 'dm' | 'group_dm' | 'channel' {
+  if (channel.startsWith('D')) return 'dm';
+  return rootTs === null ? 'group_dm' : 'channel';
+}
+const KIND_OFF = { dm: 'DM은', group_dm: '그룹 DM은', channel: '채널 스레드는' };
 
 const splitKey = (key: string) => {
   const [channel, rest] = key.split(':');
@@ -257,13 +264,17 @@ export function createEngine(deps: EngineDeps) {
       // 코드로 확인한 내용은 체크아웃된 브랜치 기준이라 배포 버전과 다를 수 있다. 자동으로 보내지 않는다
       // 키워드로 감지한 대화도 나를 부른 게 아니라 끼어드는 답장이 되므로 자동으로 보내지 않는다
       const byKeyword = watch.source === 'keyword';
-      if ((code || byKeyword) && decision === 'auto') decision = 'approve';
+      // 자동 전송할 대화 종류에서 뺀 대화(예: DM)도 승인 대기
+      const kind = conversationKind(channel, rootTs);
+      const offTarget = !parseList(setting('autoTargets')).includes(kind);
+      if ((code || byKeyword || offTarget) && decision === 'auto') decision = 'approve';
       store.setWatchTopic(key, result.topic, true);
       // 대화별 '초안만'과 전역 초안 모드를 구분해서 보여준다
       const hold = [
         ...holdReasons(result, sendMode, t).map((r) => (r === '전송 설정이 초안 모드' && watch.mode === 'draft' ? "이 대화가 '초안만'" : r)),
         ...(code ? ['코드로 확인한 내용 포함', ...unverified(code)] : []),
         ...(byKeyword ? ['키워드로 감지한 대화'] : []),
+        ...(offTarget ? [`${KIND_OFF[kind]} 자동 전송 안 함`] : []),
       ];
 
       store.supersedeOpen(key);

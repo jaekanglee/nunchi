@@ -14,6 +14,9 @@ type SettingDef = {
   desc: string;
 };
 
+// 자동 전송할 대화 종류: 1:1 DM, 그룹 DM, 채널 스레드
+export const AUTO_TARGETS = ['dm', 'group_dm', 'channel'] as const;
+
 export const SETTINGS: Record<string, SettingDef> = {
   paused: { values: ['on', 'off'], fallback: 'off', desc: '전체 일시정지 (on이면 판단·초안·자동 전송 모두 멈춤)' },
   autoDetect: { values: ['on', 'off'], fallback: 'on', desc: '자동 감지 (off면 링크로 등록한 대화만)' },
@@ -29,6 +32,7 @@ export const SETTINGS: Record<string, SettingDef> = {
   batchDelaySec: { range: [10, 3600], unit: '초', fallback: '120', desc: '눈치 보는 스레드의 나머지 댓글을 몇 초 모았다가 판단할지' },
   autoSendMinSec: { range: [0, 3600], unit: '초', fallback: '60', desc: '자동 전송 지연 최소(초). 최소~최대 사이에서 무작위' },
   autoSendMaxSec: { range: [0, 3600], unit: '초', fallback: '300', desc: '자동 전송 지연 최대(초)' },
+  autoTargets: { list: AUTO_TARGETS, fallback: AUTO_TARGETS.join(','), desc: `자동 전송할 대화 종류 (쉼표 구분, 없으면 none. 가능: ${AUTO_TARGETS.join(', ')})` },
   autoCategories: { list: AUTO_ELIGIBLE, fallback: DEFAULT_THRESHOLDS.autoCategories.join(','), desc: `자동 전송할 카테고리 (쉼표 구분, 없으면 none. 가능: ${AUTO_ELIGIBLE.join(', ')})` },
   autoMaxRisk: { range: [0, 100], fallback: String(DEFAULT_THRESHOLDS.autoMaxRisk), desc: '위험이 이 값 미만일 때만 자동 전송 (0~100)' },
   autoMinConfidence: { range: [0, 100], unit: '%', fallback: String(DEFAULT_THRESHOLDS.autoMinConfidence * 100), desc: '확신이 이 값(%) 이상일 때만 자동 전송' },

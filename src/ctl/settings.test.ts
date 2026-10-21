@@ -77,3 +77,10 @@ test('프로젝트 키워드: 폴더 경로별 키워드 목록(JSON), 키워드
   assert.deepEqual(parseKeywordMap('{"\/a":["x"]}'), { '/a': ['x'] });
   assert.deepEqual(parseKeywordMap('{깨짐'), {});
 });
+
+test('자동 전송할 대화 종류: 기본은 DM·그룹 DM·채널 스레드 모두, 목록 안에서만', () => {
+  assert.equal(SETTINGS.autoTargets.fallback, 'dm,group_dm,channel');
+  assert.equal(validateSetting('autoTargets', 'channel'), null);
+  assert.equal(validateSetting('autoTargets', 'none'), null);
+  assert.match(validateSetting('autoTargets', 'dm,email')!, /쓸 수 없는 값/);
+});

@@ -427,6 +427,8 @@
       <div class="card step">
         <h3>자동 전송</h3>
         <div class="hint">초안마다 모델이 점수 두 개를 매깁니다. <b>위험</b>(0~100)은 확인 없이 보냈을 때 문제가 될 가능성, <b>확신</b>(0~100%)은 초안이 내 말투·의도에 맞을 가능성입니다. 두 점수는 합치거나 곱하지 않고 아래 기준과 하나씩 비교합니다. 업무지시·결정, 장애·긴급, 민감은 점수와 상관없이 항상 직접 확인합니다.</div>
+        <div class="srow"><div><b>자동 전송할 대화</b><small>여기서 고른 곳에 온 메시지만 자동으로 보냅니다. 뺀 곳은 초안을 승인 대기로 둡니다</small></div></div>
+        <div id="autoTargets"></div>
         <div class="srow"><div><b>자동 전송할 카테고리</b><small>여기서 고른 종류의 대화만 자동으로 보냅니다</small></div></div>
         <div id="autoCategories"></div>
         <div class="srow"><div><b>자동 전송할 위험</b><small>위험이 이 값보다 낮은 초안만 자동으로 보냅니다. 낮출수록 자동 전송이 줄어듭니다</small></div><span class="numbox"><input type="number" id="autoMaxRisk" min="0" max="100" />미만</span></div>
@@ -996,8 +998,12 @@
       $('codeNotes').textContent = `코드 노트 ${state.codeNotes ?? 0}개`;
       const autoCats = state.settings.autoCategories === 'none' ? [] : state.settings.autoCategories.split(',');
       $('autoCategories').replaceChildren(...state.autoEligible.map((c) => el('label', { className: 'opt' },
-        el('input', { type: 'checkbox', checked: autoCats.includes(c), value: c, onchange: saveAutoCategories }),
+        el('input', { type: 'checkbox', checked: autoCats.includes(c), value: c, onchange: saveChecked('autoCategories') }),
         el('div', {}, el('b', { textContent: c })))));
+      const targets = state.settings.autoTargets === 'none' ? [] : state.settings.autoTargets.split(',');
+      $('autoTargets').replaceChildren(...Object.entries(TARGET_LABEL).map(([v, label]) => el('label', { className: 'opt' },
+        el('input', { type: 'checkbox', checked: targets.includes(v), value: v, onchange: saveChecked('autoTargets') }),
+        el('div', {}, el('b', { textContent: label })))));
       renderRiskZones();
       $('inboxCount').textContent = state.openDrafts.length;
       $('inboxSec').classList.toggle('collapsed', inboxCollapsed);
@@ -1177,9 +1183,12 @@
         MODEL_LABEL[s.model] ?? s.model,
       ].join(' · ');
       const cats = s.autoCategories === 'none' ? 0 : s.autoCategories.split(',').length;
+      const targets = s.autoTargets === 'none' ? [] : s.autoTargets.split(',');
+      const where = targets.length === Object.keys(TARGET_LABEL).length ? '' : `${targets.map((t) => TARGET_LABEL[t]).join('·')}만 · `;
       $('replySummary').textContent = [
         `나를 부르면 ${s.urgentDelaySec}초 · 댓글은 ${s.batchDelaySec}초 모아서 판단`,
-        s.sendMode === 'auto' ? `자동 전송 ${cats}종류 · 위험 ${s.autoMaxRisk} 미만` : '자동 전송 안 함 (초안만)',
+        s.sendMode !== 'auto' ? '자동 전송 안 함 (초안만)'
+          : targets.length ? `자동 전송: ${where}카테고리 ${cats}개 · 위험 ${s.autoMaxRisk} 미만` : '자동 전송할 대화 없음',
       ].join(' · ');
       const groups = s.mentionGroups === 'none' ? 0 : s.mentionGroups.split(',').length;
       $('slackSummary').textContent = groups ? `그룹 멘션 ${groups}개` : '그룹 멘션 없음';
@@ -1210,7 +1219,7 @@
       const range = (lo, hi) => (lo === hi ? `${lo}` : `${lo}~${hi}`);
       const autoText = s.sendMode === 'draft'
         ? "승인 대기 (전송 방식이 '초안만'이라서. '자동'으로 바꾸면 자동 전송)"
-        : `자동 전송 (고른 카테고리이고 확신 ${s.autoMinConfidence}% 이상일 때. 아니면 승인 대기)`;
+        : `자동 전송 (고른 대화·카테고리이고 확신 ${s.autoMinConfidence}% 이상일 때. 아니면 승인 대기)`;
       const rows = [
         auto > 0 && `위험 ${range(0, auto - 1)} → ${autoText}`,
         auto < esc && `위험 ${range(auto, esc - 1)} → 승인 대기: 내가 보고 보내기`,
@@ -1218,11 +1227,14 @@
       ].filter(Boolean);
       $('riskZones').replaceChildren(el('b', { textContent: '지금 설정이면' }), ...rows.map((t) => el('div', { textContent: `· ${t}` })));
     }
-    async function saveAutoCategories() {
-      const picked = [...$('autoCategories').querySelectorAll('input:checked')].map((i) => i.value);
-      try { await api.setSetting('autoCategories', picked.join(',') || 'none'); toast('저장했습니다. 다음 판단부터 적용됩니다'); }
+    // 자동 전송할 대화 종류 (설정값 autoTargets)
+    const TARGET_LABEL = { dm: 'DM', group_dm: '그룹 DM', channel: '채널 스레드' };
+    // 체크박스 목록(설정 id와 같은 칸)에서 고른 값을 쉼표로 저장
+    const saveChecked = (key) => async () => {
+      const picked = [...$(key).querySelectorAll('input:checked')].map((i) => i.value);
+      try { await api.setSetting(key, picked.join(',') || 'none'); toast('저장했습니다. 다음 판단부터 적용됩니다'); }
       catch (err) { toast(errText(err), 'err'); }
-    }
+    };
     for (const id of TIMING) {
       $(id).onchange = async () => {
         try { await api.setSetting(id, $(id).value.trim()); toast('저장했습니다. 다음 메시지부터 적용됩니다'); }

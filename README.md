@@ -239,7 +239,7 @@ Slack ──Socket Mode──▶ gateway ──▶ engine ──▶ store (SQLit
    |---|---|---|
    | `skip` | 내 차례 아님 | 기록만 남김 |
    | `escalate` | 업무지시·결정, 장애·긴급, 민감 카테고리, 모르는 사실 필요, 위험 ≥ `escalateRisk` | 답장 없이 직접 확인 알림 |
-   | `auto` | 전송 방식이 자동 + 허용 카테고리 + 위험 < `autoMaxRisk` + 확신 ≥ `autoMinConfidence` | 무작위 지연 후 자동 전송 |
+   | `auto` | 전송 방식이 자동 + 허용 대화 종류(`autoTargets`) + 허용 카테고리 + 위험 < `autoMaxRisk` + 확신 ≥ `autoMinConfidence` | 무작위 지연 후 자동 전송 |
    | `approve` | 그 외 | 승인 대기. 자동 전송하지 않은 이유를 카드에 표시 |
 
    카테고리는 `인사/잡담`, `단순확인·리액션`, `링크요청`, `일정조율`, `정보질문`, `업무지시·결정`, `장애·긴급`, `민감` 8개입니다. 앞 두 개가 기본 자동 전송 대상이고, 마지막 세 개는 설정으로도 자동 대상이 될 수 없습니다.
@@ -343,6 +343,7 @@ SQLite 한 파일(`nunchi.db`)에 아래 테이블이 있습니다. 이전 버�
 | `batchDelaySec` | `120` | 10~3600 | 눈치 보는 스레드의 댓글 모으는 시간(초) |
 | `autoSendMinSec` | `60` | 0~3600 | 자동 전송 지연 최소(초) |
 | `autoSendMaxSec` | `300` | 0~3600 | 자동 전송 지연 최대(초) |
+| `autoTargets` | `dm,group_dm,channel` | dm / group_dm / channel, 쉼표 구분 / none | 자동 전송할 대화 종류 (DM, 그룹 DM, 채널 스레드). 뺀 곳은 승인 대기 |
 | `autoCategories` | `인사/잡담,단순확인·리액션` | 자동 가능 카테고리, 쉼표 구분 / none | 자동 전송할 카테고리 |
 | `autoMaxRisk` | `20` | 0~100 | 위험이 이 값 미만일 때만 자동 |
 | `autoMinConfidence` | `80` | 0~100 (%) | 확신이 이 값 이상일 때만 자동 |
@@ -376,7 +377,7 @@ nunchi pause | resume   # 전체 일시정지 / 재개
 nunchi set sendMode draft           # draft | auto
 nunchi set mentionGroups S0123ABCD  # 쉼표로 여러 개, none이면 끔
 nunchi set autoSendMinSec 30        # 타이밍(초): urgentDelaySec, batchDelaySec, autoSendMinSec, autoSendMaxSec
-nunchi set autoMaxRisk 30           # 자동 전송 기준: autoMaxRisk, autoMinConfidence(%), escalateRisk, autoCategories(쉼표 구분)
+nunchi set autoMaxRisk 30           # 자동 전송 기준: autoMaxRisk, autoMinConfidence(%), escalateRisk, autoCategories·autoTargets(쉼표 구분)
 nunchi watch 3 off      # 대화별 on | draft | off
 nunchi drafts           # 처리 필요 초안 본문
 ```
