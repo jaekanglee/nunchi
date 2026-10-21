@@ -127,6 +127,17 @@ test('목록 정보: 주제는 요약이 덮어쓰고, 시작 시각은 더 이�
   assert.deepEqual(JSON.parse(s.getWatch('C1:1.0')!.participants!), ['지수', '서연', '나']);
 });
 
+test('고정한 이름: 지정·해제되고 요약이 주제를 바꿔도 남는다', () => {
+  const s = openStore(':memory:');
+  s.addWatch('C1:1.0', 'C1', '1.0', 'mention');
+  s.setWatchPinnedName('C1:1.0', '  결제팀 DM  ');
+  s.setWatchTopic('C1:1.0', '다른 주제');
+  assert.equal(s.getWatch('C1:1.0')?.pinned_name, '결제팀 DM');
+  assert.equal(s.getWatch('C1:1.0')?.topic, '다른 주제');
+  s.setWatchPinnedName('C1:1.0', '   ');
+  assert.equal(s.getWatch('C1:1.0')?.pinned_name, null);
+});
+
 test('replyState: 열린 초안 > 내가 답함 > 최신까지 판단해 답 불필요 > 판단 전', () => {
   const w = { mode: 'on' as const, last_ts: '10.0', last_name: '지수' };
   assert.equal(replyState(w, { status: 'escalated', basis_ts: '10.0' }), 'urgent');

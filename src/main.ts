@@ -65,6 +65,10 @@ async function boot() {
     store.setWatchMode(key, mode);
     onChange();
   });
+  ipcMain.handle('watch:setName', (_ev, key: string, name: string | null) => {
+    store.setWatchPinnedName(key, name);
+    onChange();
+  });
   ipcMain.handle('watch:setLlm', (_ev, key: string, model: string | null, effort: string | null) => {
     store.setWatchLlm(key, model, effort);
     onChange();
@@ -91,6 +95,9 @@ async function boot() {
     if (!w) return;
     const openApp = () => void shell.openExternal(buildDeepLink(teamId, w.channel, w.root_ts));
     Menu.buildFromTemplate([
+      { label: '이름 고정·수정', click: () => win.webContents.send('watch:rename', key) },
+      ...(w.pinned_name ? [{ label: '이름 고정 해제', click: () => { store.setWatchPinnedName(key, null); onChange(); } }] : []),
+      { type: 'separator' as const },
       { label: 'Slack 앱에서 열기', enabled: teamId !== '', click: openApp },
       { label: '브라우저로 열기', enabled: teamUrl !== '', click: () => void shell.openExternal(buildPermalink(teamUrl, w.channel, w.root_ts)) },
       { type: 'separator' },

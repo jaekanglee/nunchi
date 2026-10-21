@@ -14,6 +14,8 @@ contextBridge.exposeInMainWorld('nunchi', {
   reply: (key: string, text: string) => ipcRenderer.invoke('message:reply', key, text),
   ignoreDraft: (id: number) => ipcRenderer.invoke('draft:ignore', id),
   onChange: (cb: () => void) => ipcRenderer.on('state:changed', () => cb()),
+  setWatchName: (key: string, name: string | null) => ipcRenderer.invoke('watch:setName', key, name),
+  onRename: (cb: (key: string) => void) => ipcRenderer.on('watch:rename', (_e, key: string) => cb(key)),
   watchMenu: (key: string) => ipcRenderer.invoke('watch:contextMenu', key),
   requestDraft: (key: string, hint: string, withCode = false) => ipcRenderer.invoke('draft:request', key, hint, withCode),
   pickFolders: () => ipcRenderer.invoke('dialog:pickFolders'),

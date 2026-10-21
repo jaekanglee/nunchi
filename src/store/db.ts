@@ -22,6 +22,7 @@ export type Watch = {
   channel_name: string | null; // #채널 이름, DM, 그룹 DM
   first_ts: string | null; // 대화 시작 시각 (스레드는 본문, DM은 읽은 것 중 가장 오래된 메시지)
   participants: string | null; // 참여자 이름 JSON 배열
+  pinned_name: string | null; // 내가 직접 고정한 이름. 있으면 LLM 주제보다 우선한다
   archived_at: number | null; // 보관한 시각. 있으면 목록에서 빠지고 감시도 안 한다
 };
 // edit_mark: 요약 시점의 max(basis_ts, 읽은 메시지 edited.ts). 이전 버전 행은 null
@@ -120,7 +121,7 @@ export function openStore(file: string) {
   `);
   // 이전 버전 DB에 없는 컬럼 추가
   const cols = (db.prepare('PRAGMA table_info(watches)').all() as { name: string }[]).map((c) => c.name);
-  for (const col of ['title', 'last_ts', 'last_name', 'last_text', 'model', 'effort', 'topic', 'channel_name', 'first_ts', 'participants']) {
+  for (const col of ['title', 'last_ts', 'last_name', 'last_text', 'model', 'effort', 'topic', 'channel_name', 'first_ts', 'participants', 'pinned_name']) {
     if (!cols.includes(col)) db.exec(`ALTER TABLE watches ADD COLUMN ${col} TEXT`);
   }
   if (!cols.includes('archived_at')) db.exec('ALTER TABLE watches ADD COLUMN archived_at INTEGER');
@@ -207,6 +208,10 @@ export function openStore(file: string) {
     setWatchTopic(key: string, topic: string, onlyIfEmpty = false) {
       if (!topic.trim()) return;
       db.prepare(`UPDATE watches SET topic = ? WHERE key = ?${onlyIfEmpty ? ' AND topic IS NULL' : ''}`).run(topic.trim(), key);
+    },
+    // 빈 값이면 고정 해제
+    setWatchPinnedName(key: string, name: string | null) {
+      db.prepare('UPDATE watches SET pinned_name = ? WHERE key = ?').run(name?.trim() || null, key);
     },
     setChannelName(key: string, name: string) {
       db.prepare('UPDATE watches SET channel_name = ? WHERE key = ?').run(name, key);

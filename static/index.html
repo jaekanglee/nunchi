@@ -66,6 +66,7 @@
     .watch:hover { background: var(--panel-2); }
     .watch.selected { background: var(--brand-soft); }
     .watch .body { flex: 1; min-width: 0; }
+    .watch .name-edit { flex: 1; min-width: 0; font: inherit; font-weight: 600; background: var(--panel); color: inherit; border: 1px solid var(--brand); border-radius: 6px; padding: 2px 6px; outline: none; }
     .watch .name { flex: 1; min-width: 0; font-weight: 600; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; word-break: break-all; }
     .watch .top { display: flex; justify-content: space-between; align-items: center; gap: 6px; margin-bottom: 3px; }
     .watch.off { opacity: .55; }
@@ -719,7 +720,8 @@
     let state = { openDrafts: [], watches: [] };
     let selected = null;
 
-    const titleOf = (key) => { const w = state.watches.find((x) => x.key === key); return w?.topic ?? w?.title ?? key; };
+    const nameOf = (w) => w.pinned_name ?? w.topic ?? w.title ?? w.key;
+    const titleOf = (key) => { const w = state.watches.find((x) => x.key === key); return w ? nameOf(w) : key; };
 
     function draftCard(d) {
       const box = el('div', { className: `draft ${d.status === 'escalated' ? 'escalated' : ''}` });
@@ -797,6 +799,27 @@
         ignore, send);
     }
 
+    // 이름 고정: 우클릭 메뉴 → 행 안에서 바로 입력. Enter 저장(비우면 해제), Esc·바깥 클릭 취소
+    let renaming = null;
+    const renderWatches = () => $('watches').replaceChildren(...state.watches.map(watchRow));
+    function renameInput(w) {
+      let done = false;
+      const finish = async (save) => {
+        if (done) return;
+        done = true;
+        renaming = null;
+        if (save) try { await api.setWatchName(w.key, input.value); } catch (err) { toast(errText(err), 'err'); }
+        renderWatches();
+      };
+      const input = el('input', { className: 'name-edit', value: w.pinned_name ?? nameOf(w), placeholder: '비우면 고정 해제', maxLength: 80,
+        onclick: (e) => e.stopPropagation(),
+        onkeydown: (e) => { if (e.key === 'Enter') finish(true); else if (e.key === 'Escape') { e.stopPropagation(); finish(false); } },
+        onblur: () => finish(false) });
+      setTimeout(() => { input.focus(); input.select(); });
+      return input;
+    }
+    api.onRename((key) => { renaming = key; renderWatches(); });
+
     function watchRow(w) {
       const open = state.openDrafts.filter((d) => d.key === w.key).length;
       const sel = el('select', { className: 'mode', title: '이 대화 처리 방식', onclick: (e) => e.stopPropagation(), onchange: () => api.setWatchMode(w.key, sel.value) },
@@ -807,7 +830,7 @@
       const body = el('div', { className: 'body' },
         el('div', { className: 'top' },
           el('span', { className: `reply ${w.reply_state}`, textContent: REPLY[w.reply_state][0], title: REPLY[w.reply_state][1] }),
-          el('div', { className: 'name', textContent: w.topic ?? w.title ?? w.key, title: w.title ?? '' }),
+          renaming === w.key ? renameInput(w) : el('div', { className: `name ${w.pinned_name ? 'pinned' : ''}`, textContent: (w.pinned_name ? '📌 ' : '') + nameOf(w), title: w.title ?? '' }),
           el('span', { className: 'hint', style: 'flex:none', textContent: w.last_ts ? shortTime(w.last_ts) : '' })),
         meta ? el('div', { className: 'meta-line', textContent: meta }) : '',
         el('div', { className: 'last', textContent: w.last_ts ? `${w.last_name}: ${w.last_text}` : '아직 읽지 않음' }),
@@ -956,7 +979,7 @@
 
     function select(key) {
       selected = key;
-      $('watches').replaceChildren(...state.watches.map(watchRow));
+      renderWatches();
       if (state.openDrafts.length) $('inbox').replaceChildren(...state.openDrafts.map(inboxRow));
       renderDetailLlm();
       renderDetail(true);
@@ -1009,7 +1032,7 @@
       $('inboxSec').classList.toggle('collapsed', inboxCollapsed);
       $('watchCount').textContent = state.watches.length;
       $('inbox').replaceChildren(...(state.openDrafts.length ? state.openDrafts.map(inboxRow) : [el('div', { className: 'card empty', style: 'padding:10px', textContent: '처리할 초안이 없습니다 🎉' })]));
-      $('watches').replaceChildren(...state.watches.map(watchRow));
+      if (!renaming) renderWatches();
       tick();
       if (!$('archive').hidden) renderArchive();
       await renderDetail();
@@ -1248,7 +1271,7 @@
       $('archiveList').replaceChildren(...(rows.length ? rows.map((w) => el('div', { className: 'card step' },
         el('div', { className: 'srow' },
           el('div', {},
-            el('b', { textContent: w.topic ?? w.title ?? w.key }),
+            el('b', { textContent: nameOf(w) }),
             el('small', { textContent: [w.channel_name, `${new Date(w.archived_at).toLocaleString()} 보관`].filter(Boolean).join(' · ') })),
           el('span', { style: 'display:flex;gap:6px;flex:none' },
             el('button', { className: 'btn primary', textContent: '복원', onclick: (e) => act(e.currentTarget, '복원 중…', async () => { await api.restoreArchived(w.key); toast('복원했습니다. 감지를 다시 시작합니다'); }) }),
