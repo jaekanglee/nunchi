@@ -2,6 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+import type { CodeContext, CodeFacts } from '../responder/codefacts.js';
 
 export type WatchMode = 'on' | 'off' | 'draft';
 export type Watch = {
@@ -69,7 +70,10 @@ export type Draft = {
   sent_ts: string | null;
   hold_reason: string | null; // 자동 전송하지 않은 이유 (' · '로 연결)
   judge_cost_usd: number | null; // 1차 판단(Haiku) 비용. '규칙' skip·직접 요청 행은 null
+  code_findings_id: number | null; // 이 초안에 넣은 코드 확인 결과 (code_findings.id)
 } & CostColumns;
+// 화면 목록용: 연결된 코드 확인 결과(JSON 문자열)를 함께 싣는다
+export type DraftRow = Draft & { code_facts: string | null; code_unknowns: string | null; code_heads: string | null };
 
 // LLM 호출 비용·토큰. claude -p 출력에 없는 값은 null로 저장한다
 export const COST_COLS = ['cost_usd', 'input_tokens', 'output_tokens', 'cache_read_tokens', 'cache_creation_tokens', 'thinking_tokens'] as const;
@@ -78,10 +82,12 @@ export type CostFields = Partial<CostColumns>;
 function costValues(c: CostFields): (number | null)[] {
   return COST_COLS.map((col) => c[col] ?? null);
 }
-export type DraftInput = Omit<Draft, 'id' | 'created_at' | 'final_text' | 'sent_ts' | 'judge_cost_usd' | keyof CostColumns> &
-  CostFields & { judge_cost_usd?: number | null };
+export type DraftInput = Omit<Draft, 'id' | 'created_at' | 'final_text' | 'sent_ts' | 'judge_cost_usd' | 'code_findings_id' | keyof CostColumns> &
+  CostFields & { judge_cost_usd?: number | null; code_findings_id?: number | null };
 
 const WATCH_TTL_MS = 3 * 24 * 60 * 60 * 1000;
+const DRAFT_ROWS = `SELECT d.*, c.facts AS code_facts, c.unknowns AS code_unknowns, c.heads AS code_heads
+  FROM drafts d LEFT JOIN code_findings c ON c.id = d.code_findings_id`;
 
 export function openStore(file: string) {
   // 처음 설치한 맥에는 데이터 폴더가 아직 없다
@@ -106,6 +112,11 @@ export function openStore(file: string) {
       id INTEGER PRIMARY KEY AUTOINCREMENT, key TEXT NOT NULL, basis_ts TEXT NOT NULL,
       body TEXT NOT NULL, created_at INTEGER NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS code_findings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, key TEXT NOT NULL, created_at INTEGER NOT NULL, topic TEXT NOT NULL,
+      answerable INTEGER NOT NULL, facts TEXT NOT NULL, unknowns TEXT NOT NULL, heads TEXT NOT NULL,
+      cost_usd REAL, input_tokens INTEGER, output_tokens INTEGER, cache_read_tokens INTEGER, cache_creation_tokens INTEGER, thinking_tokens INTEGER
+    );
   `);
   // 이전 버전 DB에 없는 컬럼 추가
   const cols = (db.prepare('PRAGMA table_info(watches)').all() as { name: string }[]).map((c) => c.name);
@@ -122,9 +133,10 @@ export function openStore(file: string) {
     if (!summaryCols.includes(col)) db.exec(`ALTER TABLE summaries ADD COLUMN ${col} ${costType(col)}`);
   }
   if (!draftCols.includes('judge_cost_usd')) db.exec('ALTER TABLE drafts ADD COLUMN judge_cost_usd REAL');
+  if (!draftCols.includes('code_findings_id')) db.exec('ALTER TABLE drafts ADD COLUMN code_findings_id INTEGER');
   if (!summaryCols.includes('edit_mark')) db.exec('ALTER TABLE summaries ADD COLUMN edit_mark TEXT');
   // 목록·대화 화면은 대화별 최신 초안·요약을 자주 찾는다. 인덱스에 id(rowid) 순서가 같이 들어가 ORDER BY id DESC LIMIT 1도 인덱스로 끝난다
-  db.exec('CREATE INDEX IF NOT EXISTS drafts_key ON drafts(key); CREATE INDEX IF NOT EXISTS summaries_key ON summaries(key);');
+  db.exec('CREATE INDEX IF NOT EXISTS drafts_key ON drafts(key); CREATE INDEX IF NOT EXISTS summaries_key ON summaries(key); CREATE INDEX IF NOT EXISTS code_findings_key ON code_findings(key);');
 
   return {
     getSetting(key: string, fallback: string): string {
@@ -166,6 +178,7 @@ export function openStore(file: string) {
       try {
         db.prepare('DELETE FROM drafts WHERE key = ?').run(key);
         db.prepare('DELETE FROM summaries WHERE key = ?').run(key);
+        db.prepare('DELETE FROM code_findings WHERE key = ?').run(key);
         db.prepare('DELETE FROM watches WHERE key = ?').run(key);
         db.prepare('INSERT OR IGNORE INTO deleted_keys (key) VALUES (?)').run(key);
         db.exec('COMMIT');
@@ -245,12 +258,12 @@ export function openStore(file: string) {
       const r = db
         .prepare(
           `INSERT INTO drafts (key, channel, root_ts, basis_ts, category, risk, confidence, reason, draft_text, status, hold_reason, created_at,
-             judge_cost_usd, ${COST_COLS.join(', ')})
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+             judge_cost_usd, code_findings_id, ${COST_COLS.join(', ')})
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
           d.key, d.channel, d.root_ts, d.basis_ts, d.category, d.risk, d.confidence, d.reason, d.draft_text, d.status, d.hold_reason, Date.now(),
-          d.judge_cost_usd ?? null, ...costValues(d),
+          d.judge_cost_usd ?? null, d.code_findings_id ?? null, ...costValues(d),
         );
       return Number(r.lastInsertRowid);
     },
@@ -271,19 +284,36 @@ export function openStore(file: string) {
     },
     // sinceTs: 이보다 오래된 메시지 기준의 초안은 뺀다 (화면에 안 보이는 기록. DM은 키가 고정이라 끝없이 쌓인다).
     // 열린 초안, 늘 보이는 스레드 본문 기준 초안, 보낸 메시지가 화면 범위 안인 초안은 남긴다
-    listDraftsByKey(key: string, sinceTs: string | null = null): Draft[] {
+    listDraftsByKey(key: string, sinceTs: string | null = null): DraftRow[] {
       return db
         .prepare(
-          `SELECT * FROM drafts WHERE key = ?
-             AND (? IS NULL OR status IN ('pending', 'escalated', 'scheduled') OR basis_ts = root_ts
-               OR CAST(basis_ts AS REAL) >= CAST(? AS REAL) OR CAST(sent_ts AS REAL) >= CAST(? AS REAL))
-           ORDER BY id`,
+          `${DRAFT_ROWS} WHERE d.key = ?
+             AND (? IS NULL OR d.status IN ('pending', 'escalated', 'scheduled') OR d.basis_ts = d.root_ts
+               OR CAST(d.basis_ts AS REAL) >= CAST(? AS REAL) OR CAST(d.sent_ts AS REAL) >= CAST(? AS REAL))
+           ORDER BY d.id`,
         )
-        .all(key, sinceTs, sinceTs, sinceTs) as Draft[];
+        .all(key, sinceTs, sinceTs, sinceTs) as DraftRow[];
     },
     // 지금 내가 처리해야 하는 초안 (모든 대화)
-    listOpenDrafts(): Draft[] {
-      return db.prepare(`SELECT * FROM drafts WHERE status IN ('pending', 'escalated', 'scheduled') ORDER BY id DESC`).all() as Draft[];
+    listOpenDrafts(): DraftRow[] {
+      return db.prepare(`${DRAFT_ROWS} WHERE d.status IN ('pending', 'escalated', 'scheduled') ORDER BY d.id DESC`).all() as DraftRow[];
+    },
+
+    insertCodeFindings(key: string, cf: CodeFacts, cost: CostFields): number {
+      const r = db
+        .prepare(
+          `INSERT INTO code_findings (key, created_at, topic, answerable, facts, unknowns, heads, ${COST_COLS.join(', ')})
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        )
+        .run(key, cf.created_at, cf.topic, cf.answerable ? 1 : 0, JSON.stringify(cf.facts), JSON.stringify(cf.unknowns), JSON.stringify(cf.heads), ...costValues(cost));
+      return Number(r.lastInsertRowid);
+    },
+    latestCodeFindings(key: string): CodeContext['facts'] | undefined {
+      const r = db.prepare('SELECT * FROM code_findings WHERE key = ? ORDER BY id DESC LIMIT 1').get(key) as
+        | { id: number; created_at: number; topic: string; answerable: number; facts: string; unknowns: string; heads: string }
+        | undefined;
+      if (!r) return undefined;
+      return { id: r.id, created_at: r.created_at, topic: r.topic, answerable: r.answerable === 1, facts: JSON.parse(r.facts), unknowns: JSON.parse(r.unknowns), heads: JSON.parse(r.heads) };
     },
   };
 }

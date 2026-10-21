@@ -225,7 +225,7 @@ test('이전 스키마 DB를 열면 새 컬럼이 추가되고 기존 행은 보
   const check = new DatabaseSync(file);
   const names = (table: string) => (check.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]).map((c) => c.name);
   const cost = ['cost_usd', 'input_tokens', 'output_tokens', 'cache_read_tokens', 'cache_creation_tokens', 'thinking_tokens'];
-  for (const c of [...cost, 'judge_cost_usd', 'hold_reason']) assert.ok(names('drafts').includes(c), c);
+  for (const c of [...cost, 'judge_cost_usd', 'hold_reason', 'code_findings_id']) assert.ok(names('drafts').includes(c), c);
   for (const c of [...cost, 'edit_mark']) assert.ok(names('summaries').includes(c), c);
   check.close();
 });
@@ -256,4 +256,32 @@ test('대화 화면 초안 기록: 보이는 메시지보다 오래된 닫힌 �
   s.setDraftStatus(sentShown, 'sent', { sent_ts: '250.0' });
   assert.deepEqual(s.listDraftsByKey('C1:1', '200.0').map((d) => d.id), [oldOpen, recent, onRoot, sentShown]);
   assert.deepEqual(s.listDraftsByKey('C1:1').map((d) => d.id), [old, oldOpen, recent, onRoot, sentShown]);
+});
+
+const findings = {
+  created_at: 1000, answerable: true, topic: '푸시 필터', unknowns: ['서버 값'],
+  facts: [{ claim: 'c', folder: '/w/rider', evidence: [{ path: 'lib/a.dart', start: 1, end: 2 }], verified: true }],
+  heads: [{ dir: '/w/rider', branch: 'dev', commit: 'a'.repeat(40) }],
+};
+
+test('코드 확인 결과: 대화별 최신을 돌려주고, 연결한 초안 목록에 사실이 함께 오며, 대화를 지우면 같이 지운다', () => {
+  const s = openStore(':memory:');
+  s.addWatch('C1:1', 'C1', '1', 'link');
+  assert.equal(s.latestCodeFindings('C1:1'), undefined);
+  s.insertCodeFindings('C1:1', { ...findings, topic: '옛것' }, {});
+  const id = s.insertCodeFindings('C1:1', findings, { cost_usd: 0.05, input_tokens: 3 });
+  const latest = s.latestCodeFindings('C1:1')!;
+  assert.equal(latest.id, id);
+  assert.deepEqual({ ...latest, id: undefined }, { ...findings, id: undefined });
+
+  const draftId = s.insertDraft({ ...baseDraft, code_findings_id: id });
+  assert.equal(s.getDraft(draftId)!.code_findings_id, id);
+  const [open] = s.listOpenDrafts();
+  assert.deepEqual(JSON.parse(open.code_facts!), findings.facts);
+  assert.deepEqual(JSON.parse(open.code_heads!), findings.heads);
+  assert.equal(s.listDraftsByKey('C1:1')[0].code_facts, open.code_facts);
+  assert.equal(s.getDraft(s.insertDraft(baseDraft))!.code_findings_id, null);
+
+  s.deleteWatch('C1:1');
+  assert.equal(s.latestCodeFindings('C1:1'), undefined);
 });

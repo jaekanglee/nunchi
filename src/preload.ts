@@ -17,6 +17,7 @@ contextBridge.exposeInMainWorld('nunchi', {
   watchMenu: (key: string) => ipcRenderer.invoke('watch:contextMenu', key),
   requestDraft: (key: string, hint: string, withCode = false) => ipcRenderer.invoke('draft:request', key, hint, withCode),
   pickFolders: () => ipcRenderer.invoke('dialog:pickFolders'),
+  openNotes: () => ipcRenderer.invoke('notes:open'),
   openSlack: (key: string) => ipcRenderer.invoke('watch:openSlack', key),
   listArchived: () => ipcRenderer.invoke('archive:list'),
   restoreArchived: (key: string) => ipcRenderer.invoke('archive:restore', key),

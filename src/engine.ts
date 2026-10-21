@@ -3,7 +3,12 @@ import type { WebClient } from '@slack/web-api';
 import { addressedToOthersOnly, isUrgent, route, threadKey, type MessageEvent } from './slack/router.js';
 import { parsePermalink } from './slack/permalink.js';
 import { conversationTitle, participantNames, type ConversationReader } from './slack/conversation.js';
+import fs from 'node:fs';
+import path from 'node:path';
 import { generateDraft } from './responder/draft.js';
+import { investigate } from './responder/investigate.js';
+import { gitHead, noteMarkdown, verifyFacts, type CodeContext, type CodeFacts } from './responder/codefacts.js';
+import { NOTES_DIR } from './paths.js';
 import { JUDGE_EFFORT, judgeTurn } from './responder/judge.js';
 import { decide, holdReasons, type SendMode } from './responder/policy.js';
 import type { Persona } from './responder/prompt.js';
@@ -58,6 +63,8 @@ export type EngineDeps = {
   judge?: typeof judgeTurn;
   draft?: typeof generateDraft;
   summarize?: typeof summarizeConversation;
+  investigate?: typeof investigate;
+  notesDir?: string;
 };
 
 const splitKey = (key: string) => {
@@ -73,6 +80,8 @@ export function createEngine(deps: EngineDeps) {
   const judge = limit(deps.judge ?? judgeTurn);
   const draft = limit(deps.draft ?? generateDraft);
   const summarizeLlm = limit(deps.summarize ?? summarizeConversation);
+  const investigateLlm = limit(deps.investigate ?? investigate);
+  const notesDir = deps.notesDir ?? NOTES_DIR;
   // 판단·초안을 기다리는 동안 삭제·보관됐으면 결과를 버린다
   const gone = (key: string) => store.isBlocked(key) || !store.getWatch(key);
 
@@ -151,6 +160,14 @@ export function createEngine(deps: EngineDeps) {
   // 자동 전송 기준도 판단할 때마다 읽어서 바로 반영
   const thresholds = () => thresholdsFrom(setting);
 
+  // 이 대화에서 코드로 확인한 최근 결과. 지금 읽은 대화 창보다 오래된 것은 쓰지 않는다 (DM은 키가 고정이라 계속 쌓인다)
+  function codeFor(key: string, thread: ThreadMessage[]): CodeContext | undefined {
+    const cf = store.latestCodeFindings(key);
+    if (!cf || !thread[0] || cf.created_at < Number(thread[0].ts) * 1000) return undefined;
+    return { facts: cf, now: cf.heads.map((h) => gitHead(h.dir)) };
+  }
+  const unverified = (code: CodeContext | undefined) => (code?.facts.facts.some((f) => !f.verified) ? ['근거 확인 안 된 내용 있음'] : []);
+
   // urgent(나를 부름·DM)는 디바운스: 새 메시지가 오면 다시 잰다.
   // batch(나머지 댓글)는 첫 댓글부터 창을 유지한다 (댓글이 계속 와도 무한히 밀리지 않게)
   function schedule(key: string, kind: 'urgent' | 'batch' = 'urgent') {
@@ -220,15 +237,21 @@ export function createEngine(deps: EngineDeps) {
         if (!j.needs_my_reply) return skipWithoutDraft(key, channel, rootTs, last.ts, '1차 판단', j.reason, judgeCost);
       }
 
-      const drafted = await draft(thread, deps.persona, myUserId, main, undefined, myScope());
+      const code = codeFor(key, thread);
+      const drafted = await draft(thread, deps.persona, myUserId, main, undefined, myScope(), code);
       const result = drafted.output;
       if (gone(key)) return;
       const sendMode: SendMode = watch.mode === 'draft' ? 'draft' : (store.getSetting('sendMode', 'draft') as SendMode);
       const t = thresholds();
-      const decision = decide(result, sendMode, t);
+      let decision = decide(result, sendMode, t);
+      // 코드로 확인한 내용은 체크아웃된 브랜치 기준이라 배포 버전과 다를 수 있다. 자동으로 보내지 않는다
+      if (code && decision === 'auto') decision = 'approve';
       store.setWatchTopic(key, result.topic, true);
       // 대화별 '초안만'과 전역 초안 모드를 구분해서 보여준다
-      const hold = holdReasons(result, sendMode, t).map((r) => (r === '전송 설정이 초안 모드' && watch.mode === 'draft' ? "이 대화가 '초안만'" : r));
+      const hold = [
+        ...holdReasons(result, sendMode, t).map((r) => (r === '전송 설정이 초안 모드' && watch.mode === 'draft' ? "이 대화가 '초안만'" : r)),
+        ...(code ? ['코드로 확인한 내용 포함', ...unverified(code)] : []),
+      ];
 
       store.supersedeOpen(key);
       const status = { skip: 'skipped', escalate: 'escalated', approve: 'pending', auto: 'scheduled' } as const;
@@ -245,6 +268,7 @@ export function createEngine(deps: EngineDeps) {
         status: status[decision],
         hold_reason: decision === 'approve' || decision === 'escalate' ? hold.join(' · ') : null,
         judge_cost_usd: judgeCost,
+        code_findings_id: code?.facts.id ?? null,
         ...costFields(drafted),
       });
 
@@ -341,7 +365,8 @@ export function createEngine(deps: EngineDeps) {
     remember(key, thread, w.root_ts === null);
     const last = thread.at(-1);
     if (!last) throw new Error('대화에 메시지가 없습니다');
-    const drafted = await draft(thread, deps.persona, myUserId, llmFor(key, 'draft'), hint, myScope(), dirs);
+    const code = dirs ? await lookIntoCode(key, thread, dirs) : codeFor(key, thread);
+    const drafted = await draft(thread, deps.persona, myUserId, llmFor(key, 'draft'), hint, myScope(), code);
     const result = drafted.output;
     if (!result.reply) throw new Error('초안을 만들지 못했습니다');
     const t = thresholds();
@@ -351,9 +376,33 @@ export function createEngine(deps: EngineDeps) {
       key, channel: w.channel, root_ts: w.root_ts, basis_ts: last.ts,
       category: result.category, risk: result.risk, confidence: result.confidence, reason: result.reason,
       draft_text: result.reply, status: decision === 'escalate' ? 'escalated' : 'pending',
-      hold_reason: [withCode ? '코드 보고 쓴 초안' : '직접 요청한 초안', ...holdReasons(result, 'draft', t).filter((r) => r !== '전송 설정이 초안 모드')].join(' · '),
+      hold_reason: [
+        withCode ? '코드 보고 쓴 초안' : '직접 요청한 초안',
+        ...holdReasons(result, 'draft', t).filter((r) => r !== '전송 설정이 초안 모드'),
+        ...(code && !withCode ? ['코드로 확인한 내용 포함'] : []),
+        ...unverified(code),
+      ].join(' · '),
+      code_findings_id: code?.facts.id ?? null,
       ...costFields(drafted),
     });
+  }
+
+  // 코드 보고 다시 쓰기 1단계: 탐색 → 근거 검증 → 저장 → 노트. 검증·기록은 LLM이 아니라 앱이 한다
+  async function lookIntoCode(key: string, thread: ThreadMessage[], dirs: string[]): Promise<CodeContext> {
+    fs.mkdirSync(notesDir, { recursive: true });
+    const heads = dirs.map(gitHead);
+    const found = await investigateLlm(thread, myUserId, heads, notesDir, { model: setting('codeModel'), effort: llmFor(key, 'draft').effort });
+    const cf: CodeFacts = { ...found.output, created_at: Date.now(), facts: verifyFacts(found.output.facts, dirs), heads };
+    const id = store.insertCodeFindings(key, cf, costFields(found));
+    const question = [...thread].reverse().find((m) => m.user !== myUserId)?.text ?? '';
+    const at = new Date(cf.created_at);
+    const day = `${at.getFullYear()}${String(at.getMonth() + 1).padStart(2, '0')}${String(at.getDate()).padStart(2, '0')}`;
+    try {
+      fs.writeFileSync(path.join(notesDir, `${day}-${id}.md`), noteMarkdown(id, cf, question));
+    } catch (err) {
+      console.warn(`[code] 노트 저장 실패`, (err as Error).message); // 노트는 다음 조사를 돕는 보조 기록. 초안은 그대로 쓴다
+    }
+    return { facts: { ...cf, id }, now: heads };
   }
 
   return {

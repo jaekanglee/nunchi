@@ -21,6 +21,8 @@ export const SETTINGS: Record<string, SettingDef> = {
   draftEffort: { values: EFFORTS, fallback: 'medium', desc: '초안 effort' },
   summaryEffort: { values: EFFORTS, fallback: 'low', desc: '요약 effort' },
   judgeModel: { values: [...MODELS, 'off'], fallback: 'claude-haiku-5-5', desc: '채널 스레드 1차 판단 모델 (내 차례일 때만 기본 모델로 초안, DM은 항상 기본 모델, off면 끔)' },
+  // 실측(질문 4개): Haiku 탐색이 근거 23/23 확인, 비용은 한 번에 처리하던 방식의 약 40%
+  codeModel: { values: MODELS, fallback: 'claude-haiku-5-5', desc: "'코드 보고 다시 쓰기'에서 코드를 찾는 모델 (답장은 기본 모델이 쓴다)" },
   // 내가 속한 사용자 그룹 ID (쉼표로 여러 개, 비우려면 none)
   urgentDelaySec: { range: [3, 600], unit: '초', fallback: '10', desc: '나를 부른 메시지·DM이 오면 몇 초 모았다가 판단할지' },
   batchDelaySec: { range: [10, 3600], unit: '초', fallback: '120', desc: '감시 스레드의 나머지 댓글을 몇 초 모았다가 판단할지' },

@@ -39,6 +39,12 @@ test('자동 전송 기준 설정', () => {
   assert.deepEqual(thresholdsFrom(get), DEFAULT_THRESHOLDS);
 });
 
+test('코드 탐색 모델: 기본은 Haiku, 모델 목록 안에서만', () => {
+  assert.equal(SETTINGS.codeModel.fallback, 'claude-haiku-5-5');
+  assert.equal(validateSetting('codeModel', 'claude-sonnet-5-5'), null);
+  assert.match(validateSetting('codeModel', 'off')!, /쓸 수 없는 값/);
+});
+
 test('프로젝트 폴더: 줄마다 절대 경로 하나, 없으면 none', () => {
   assert.equal(validateSetting('projectDirs', 'none'), null);
   assert.equal(validateSetting('projectDirs', '/Users/me/rider-app'), null);

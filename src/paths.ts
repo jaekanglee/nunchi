@@ -23,6 +23,7 @@ export const DATA_DIR = dataDir();
 export const LEGACY_DATA_DIR = dataDir(undefined, undefined, undefined, LEGACY_APP_DIR);
 export const DB_PATH = path.join(DATA_DIR, DB_FILE);
 export const PERSONA_DIR = path.join(DATA_DIR, 'persona');
+export const NOTES_DIR = path.join(DATA_DIR, 'code-notes'); // 코드 보고 다시 쓰기의 조사 노트
 
 export type Migration = { moved: string[]; conflict: boolean };
 

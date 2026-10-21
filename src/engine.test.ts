@@ -1,3 +1,6 @@
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { WebClient } from '@slack/web-api';
@@ -5,7 +8,8 @@ import { createEngine } from './engine.js';
 import { openStore, type Store } from './store/db.js';
 import type { ClaudeResult } from './llm/claude.js';
 import type { Judgment } from './responder/judge.js';
-import type { DraftResult } from './responder/draft.js';
+import type { DraftResult, generateDraft } from './responder/draft.js';
+import type { Findings } from './responder/investigate.js';
 import type { ThreadMessage } from './responder/prompt.js';
 import type { ConversationSummary } from './summary/summarize.js';
 
@@ -172,7 +176,12 @@ test('LLM 호출은 대화 여러 개가 한꺼번에 와도 종류와 상관없
 
 function codeSetup() {
   const store = openStore(':memory:');
-  const seen: (string[] | undefined)[] = [];
+  const proj = fs.mkdtempSync(path.join(os.tmpdir(), 'nunchi-proj-'));
+  fs.mkdirSync(path.join(proj, 'lib'));
+  fs.writeFileSync(path.join(proj, 'lib/push.dart'), 'a\nb\nc\n');
+  const notesDir = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'nunchi-notes-')), 'code-notes');
+  const investigated: { dirs: string[]; notesDir: string; model?: string }[] = [];
+  const drafted: (Parameters<typeof generateDraft>[6])[] = [];
   const client = { search: { messages: async () => ({ messages: { matches: [] } }) } } as unknown as WebClient;
   const engine = createEngine({
     client,
@@ -182,36 +191,80 @@ function codeSetup() {
     persona: { styleGuide: 'S', relationships: [], pairs: [] },
     notify: () => {},
     onChange: () => {},
-    draft: async (_t, _p, _me, _llm, _req, _scope, dirs): Promise<ClaudeResult<DraftResult>> => {
-      seen.push(dirs);
-      return { output: { needs_my_reply: true, category: '단순확인·리액션', risk: 5, needs_facts_i_dont_know: false, confidence: 0.9, reply: '네', reason: 'src/push.ts:3', topic: 't' }, costUsd: 0, usage };
+    notesDir,
+    investigate: async (_t, _me, heads, nd, llm): Promise<ClaudeResult<Findings>> => {
+      investigated.push({ dirs: heads.map((h) => h.dir), notesDir: nd, model: llm?.model });
+      const facts = [
+        { claim: '숨김 값이 true면 뺀다', folder: proj, evidence: [{ path: 'lib/push.dart', start: 1, end: 2 }] },
+        { claim: '지어낸 근거', folder: proj, evidence: [{ path: 'lib/none.dart', start: 1, end: 1 }] },
+      ];
+      return { output: { answerable: true, facts, unknowns: ['서버 값'], topic: '푸시 필터' }, costUsd: 0.03, usage };
+    },
+    draft: async (_t, _p, _me, _llm, _req, _scope, code): Promise<ClaudeResult<DraftResult>> => {
+      drafted.push(code);
+      return { output: { needs_my_reply: true, category: '단순확인·리액션', risk: 5, needs_facts_i_dont_know: false, confidence: 0.9, reply: '네', reason: 'r', topic: 't' }, costUsd: 0, usage };
     },
   });
   store.addWatch(KEY, 'C1', '1700000000.000100', 'link');
   store.setSetting('sendMode', 'auto');
-  return { store, engine, seen };
+  store.setSetting('judgeModel', 'off');
+  return { store, engine, proj, notesDir, investigated, drafted };
 }
 
-test('코드 보고 다시 쓰기: 등록한 폴더를 넘기고, 자동 전송 조건이어도 승인 대기에 둔다', async () => {
-  const { store, engine, seen } = codeSetup();
-  store.setSetting('projectDirs', '/work/rider-app\n/work/server');
+test('코드 보고 다시 쓰기: 탐색 결과를 검증해 저장하고 노트를 남긴 뒤, 그 사실로 초안을 써서 승인 대기에 둔다', async () => {
+  const { store, engine, proj, notesDir, investigated, drafted } = codeSetup();
+  store.setSetting('projectDirs', proj);
   await engine.requestDraft(KEY, '', true);
-  assert.deepEqual(seen, [['/work/rider-app', '/work/server']]);
-  const d = store.listDraftsByKey(KEY)[0];
+  assert.deepEqual(investigated, [{ dirs: [proj], notesDir, model: 'claude-haiku-5-5' }]); // 탐색은 코드 탐색 모델(기본 Haiku)
+  store.setSetting('codeModel', 'claude-opus-5-5');
+  await engine.requestDraft(KEY, '', true);
+  assert.equal(investigated[1].model, 'claude-opus-5-5');
+  const saved = store.latestCodeFindings(KEY)!;
+  assert.deepEqual(saved.facts.map((f) => f.verified), [true, false]);
+  assert.equal(saved.heads[0].dir, proj);
+  const notes = fs.readdirSync(notesDir);
+  assert.equal(notes.length, 2);
+  assert.match(fs.readFileSync(path.join(notesDir, notes[0]), 'utf8'), /^# 푸시 필터/);
+  assert.equal(drafted[1]!.facts.id, saved.id);
+  const d = store.listDraftsByKey(KEY).at(-1)!;
   assert.equal(d.status, 'pending');
+  assert.equal(d.code_findings_id, saved.id);
   assert.match(d.hold_reason!, /^코드 보고 쓴 초안/);
+  assert.match(d.hold_reason!, /근거 확인 안 된 내용 있음/);
 });
 
 test('코드 보고 다시 쓰기: 폴더가 없으면 LLM을 부르지 않고 알려준다', async () => {
-  const { store, engine, seen } = codeSetup();
+  const { store, engine, investigated, drafted } = codeSetup();
   await assert.rejects(engine.requestDraft(KEY, '', true), /프로젝트 폴더/);
-  assert.equal(seen.length, 0);
+  assert.equal(investigated.length + drafted.length, 0);
   assert.equal(store.listDraftsByKey(KEY).length, 0);
 });
 
-test('일반 초안 요청은 폴더를 넘기지 않는다', async () => {
-  const { store, engine, seen } = codeSetup();
-  store.setSetting('projectDirs', '/work/rider-app');
+test('일반 초안 요청은 탐색하지 않고, 이 대화의 확인 결과가 있으면 함께 넘긴다', async () => {
+  const { store, engine, investigated, drafted } = codeSetup();
   await engine.requestDraft(KEY, '');
-  assert.deepEqual(seen, [undefined]);
+  assert.equal(drafted[0], undefined);
+  const id = store.insertCodeFindings(KEY, { created_at: Date.now(), answerable: true, topic: 't', facts: [], unknowns: [], heads: [] }, {});
+  await engine.requestDraft(KEY, '');
+  assert.equal(investigated.length, 0);
+  assert.equal(drafted[1]!.facts.id, id);
+  assert.match(store.listDraftsByKey(KEY).at(-1)!.hold_reason!, /코드로 확인한 내용 포함/);
+});
+
+test('대화 창보다 오래된 확인 결과는 넘기지 않는다', async () => {
+  const { store, engine, drafted } = codeSetup();
+  store.insertCodeFindings(KEY, { created_at: 1000, answerable: true, topic: 't', facts: [], unknowns: [], heads: [] }, {});
+  await engine.requestDraft(KEY, '');
+  assert.equal(drafted[0], undefined);
+});
+
+test('자동 판단: 코드로 확인한 내용이 들어간 초안은 자동 전송 조건이어도 승인 대기', async () => {
+  const { store, engine, drafted } = codeSetup();
+  store.insertCodeFindings(KEY, { created_at: Date.now(), answerable: true, topic: 't', facts: [], unknowns: [], heads: [] }, {});
+  await engine.addLink(LINK);
+  assert.ok(drafted[0]);
+  const d = store.listDraftsByKey(KEY)[0];
+  assert.equal(d.status, 'pending');
+  assert.equal(d.code_findings_id, drafted[0]!.facts.id);
+  assert.match(d.hold_reason!, /코드로 확인한 내용 포함/);
 });

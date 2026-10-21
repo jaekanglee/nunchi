@@ -114,10 +114,23 @@ App-Level Token(`xapp-`)에는 `connections:write`가 필요하고, 앱은 Socke
 
 "확인해보고 말씀드릴게요"로 보류된 초안이 프로젝트 코드로 답할 수 있는 질문이면, 초안 카드의 **🔎 코드 보고 다시 쓰기**를 누릅니다. 설정의 **프로젝트 폴더**에 추가한 폴더에서 코드를 찾아 읽고 답장을 다시 씁니다.
 
-- 답장에는 코드나 파일 경로를 넣지 않습니다. 근거(`파일:줄`)와 브랜치는 초안의 판단 이유에 남습니다.
-- 지금 체크아웃된 브랜치를 읽습니다. 질문 대상(배포 버전 등)과 브랜치가 다르면 답이 틀릴 수 있으니 판단 이유의 브랜치를 보고 보내세요.
-- 이렇게 쓴 초안은 자동 전송하지 않고 승인 대기나 직접 확인으로 둡니다.
-- 일반 초안보다 오래 걸리고(레포 크기에 따라 수십 초~몇 분) 비용도 더 듭니다. 자동으로 돌지 않고 버튼을 누를 때만 실행합니다.
+두 단계로 나눠 돕니다.
+
+1. **탐색**: 말투 데이터 없이 코드에서 사실과 근거(`파일:줄`)만 찾습니다. 먼저 노트 폴더에서 이전 조사 기록을 찾아보고, 없을 때만 코드를 Grep합니다. 모델은 설정의 **코드 탐색**(기본 Haiku)입니다.
+2. **초안**: 찾은 사실을 넣어 도구 없이 내 말투로 씁니다. 말투 데이터가 탐색 턴마다 다시 읽히지 않고, 일반 초안과 같은 프롬프트 캐시를 씁니다.
+
+탐색이 끝나면 앱이 직접 확인하고 기록합니다.
+
+- **근거 검증**: 인용한 파일이 등록 폴더 안에 실제로 있고 줄 번호가 파일 길이 안인지 봅니다. 아니면 그 사실은 "근거 확인 안 됨"으로 표시하고 초안에서 단정하지 않게 합니다.
+- **기준 커밋**: `.git`을 직접 읽어 브랜치와 커밋을 함께 저장합니다. 나중에 커밋이 바뀌었으면 초안에 알려 단정하지 않게 합니다.
+- **노트**: 데이터 폴더의 `code-notes/`에 사실, 근거, 기준 커밋을 마크다운으로 남깁니다. 다음 탐색은 노트를 먼저 보고, 커밋이 같으면 근거 줄만 확인합니다. 설정에서 노트 수를 보고 폴더를 열 수 있습니다.
+- **같은 대화 재사용**: 확인한 사실은 그 대화의 이후 초안(자동 판단 포함)에도 들어갑니다. 상대가 이어서 물어도 다시 "확인해볼게요"라고 하지 않습니다.
+
+초안 카드의 **코드 근거**를 펼치면 사실별 `파일:줄`, 확인 여부(✓/?), 기준 `브랜치@커밋`, 확인하지 못한 것이 보입니다. 답장 본문에는 코드나 파일 경로를 넣지 않습니다.
+
+- 지금 체크아웃된 브랜치 기준입니다. 질문 대상(배포 버전 등)과 다를 수 있으니 기준 브랜치를 보고 보내세요.
+- 코드로 확인한 내용이 들어간 초안은 자동 전송하지 않고 승인 대기나 직접 확인으로 둡니다.
+- 버튼을 누를 때만 실행합니다. 일반 초안보다 오래 걸리고 비용도 더 듭니다.
 
 ### 대화 목록 우클릭 메뉴
 
@@ -136,7 +149,7 @@ App-Level Token(`xapp-`)에는 `connections:write`가 필요하고, 앱은 Socke
 | | 보관 | 삭제 |
 |---|---|---|
 | 목록 | 사이드바에서 빠짐 | 사라짐 |
-| DB | `watches.archived_at`만 채움. 초안·요약 유지 | `watches`, `drafts`, `summaries` 행 삭제 |
+| DB | `watches.archived_at`만 채움. 초안·요약 유지 | `watches`, `drafts`, `summaries`, `code_findings` 행 삭제 |
 | 이후 메시지 | 무시 | 무시 (`deleted_keys`에 키 기록) |
 | 대기 중인 판단 예약 | 취소 | 취소 |
 | 열린 초안 | 무효(`superseded`) 처리 | 함께 삭제 |
@@ -245,6 +258,8 @@ Slack ──Socket Mode──▶ gateway ──▶ engine ──▶ store (SQLit
     │   ├── judge.ts        1차 판단 ("내 차례인가")
     │   ├── draft.ts        초안 생성, 말투 데이터 로드
     │   ├── prompt.ts       프롬프트 조립
+    │   ├── investigate.ts  코드 보고 다시 쓰기 1단계: 코드에서 사실·근거 찾기
+    │   ├── codefacts.ts    근거 검증, 기준 커밋 읽기, 노트·초안용 사실 정리
     │   └── policy.ts       카테고리, 자동/승인/직접 확인 결정
     ├── summary/summarize.ts  대화 요약
     ├── persona/
@@ -265,7 +280,7 @@ Slack ──Socket Mode──▶ gateway ──▶ engine ──▶ store (SQLit
 
 | 영역 | 채널 |
 |---|---|
-| 상태·설정 | `state:get`, `settings:set`, `dialog:pickFolders`, `state:changed`(main → 렌더러) |
+| 상태·설정 | `state:get`, `settings:set`, `dialog:pickFolders`, `notes:open`, `state:changed`(main → 렌더러) |
 | 대화 | `watch:setMode`, `watch:setLlm`, `conversation:get`, `watch:contextMenu`, `watch:openSlack` |
 | 초안·전송 | `draft:request`, `draft:send`, `draft:ignore`, `message:reply` |
 | 요약 | `summary:run`, `summary:runStale` |
@@ -283,6 +298,7 @@ SQLite 한 파일(`nunchi.db`)에 아래 테이블이 있습니다. 이전 버�
 | `watches` | 대화 단위. 키는 스레드면 `채널:루트ts`, DM이면 `채널:dm` |
 | `drafts` | 초안과 처리 결과. 카테고리, 위험, 확신, 이유, 상태, 전송 시각 |
 | `summaries` | 대화 요약(JSON)과 요약 기준 메시지 ts |
+| `code_findings` | 코드 보고 다시 쓰기의 탐색 결과. 사실·근거·검증 여부(JSON), 확인 못 한 것, 기준 브랜치·커밋, 탐색 비용. 초안은 `drafts.code_findings_id`로 연결 |
 | `deleted_keys` | 삭제한 대화 키. 이후 이벤트를 무시하는 데 씁니다 |
 
 `watches` 주요 컬럼: `mode`(`on`/`draft`/`off`), `source`(`link`/`mention` 등), `model`·`effort`(대화별 덮어쓰기, null이면 전역), `topic`, `title`, `channel_name`, `participants`, `last_ts`·`last_name`·`last_text`, `last_activity_at`, `archived_at`.
@@ -302,6 +318,7 @@ SQLite 한 파일(`nunchi.db`)에 아래 테이블이 있습니다. 이전 버�
 | `sendMode` | `draft` | draft / auto | 전송 방식 |
 | `model` | `claude-sonnet-5-5` | `claude-sonnet-5-5`, `claude-opus-5-5`, `claude-haiku-5-5` | 기본 모델 |
 | `judgeModel` | `claude-haiku-5-5` | 위 모델 또는 off | 채널 스레드 1차 판단 모델 |
+| `codeModel` | `claude-haiku-5-5` | 위 모델 | '코드 보고 다시 쓰기'에서 코드를 찾는 모델 (답장은 `model`) |
 | `draftEffort` | `medium` | low / medium / high | 초안 effort |
 | `summaryEffort` | `low` | low / medium / high | 요약 effort |
 | `urgentDelaySec` | `10` | 3~600 | DM·멘션 판단 대기(초) |
@@ -363,6 +380,7 @@ nunchi drafts           # 처리 필요 초안 본문
 | `nunchi.db` | 설정, 감시 대화, 초안, 요약 (SQLite) |
 | `credentials.json` | 암호화된 Slack 토큰 (권한 600) |
 | `persona/` | 수집한 내 메시지(`my_messages.jsonl`), 대화 쌍(`pairs.jsonl`), 말투 가이드(`style_guide.md`), 상대별 관계(`relationships.json`) |
+| `code-notes/` | 코드 보고 다시 쓰기의 조사 노트(`날짜-번호.md`). 다음 탐색이 먼저 찾아봅니다. 지워도 됩니다 |
 | `app.pid`, `app.log` | `nunchi start`로 띄운 앱의 PID와 로그 |
 
 개발할 때는 `.env`(`.env.example` 참고)에 토큰을 넣어도 됩니다. 저장된 토큰이 없을 때만 `.env`를 읽습니다.
@@ -383,7 +401,7 @@ nunchi drafts           # 처리 필요 초안 본문
 
 - **토큰 저장**: Electron `safeStorage`로 암호화합니다(macOS 키체인, Windows DPAPI, Linux 키링). 키링이 없으면 권한 600 파일에 평문으로 저장하고 화면에 경고합니다.
 - **LLM 호출 격리**: `claude -p`를 `--tools ''`, `--strict-mcp-config`, `--setting-sources ''`, `--no-session-persistence`로 실행합니다. 프롬프트에서 Slack 데이터는 태그로 감싸고 그 안의 지시는 따르지 않게 합니다.
-- **코드 읽기 범위**: '코드 보고 다시 쓰기'만 예외로 `Read`·`Grep`·`Glob`을 켭니다. `--add-dir`로 등록한 폴더만 열고, 임시 폴더에서 실행해 앱 폴더(.env에 토큰)는 읽지 못하게 합니다. `.env*`, `*.pem`, `*.key`, `*.p8`, `*.p12`, `*.jks`, `*.keystore`, SSH 키, `local.properties`, `.git/config`는 읽기를 막습니다(Grep 결과에서도 빠집니다). 쓰기·셸 도구는 켜지 않습니다.
+- **코드 읽기 범위**: '코드 보고 다시 쓰기'만 예외로 `Read`·`Grep`·`Glob`을 켭니다. `--add-dir`로 등록한 폴더와 노트 폴더만 열고, 임시 폴더에서 실행해 앱 폴더(.env에 토큰)는 읽지 못하게 합니다. `.env*`, `*.pem`, `*.key`, `*.p8`, `*.p12`, `*.jks`, `*.keystore`, SSH 키, `local.properties`, `.git/config`는 읽기를 막습니다(Grep 결과에서도 빠집니다). 쓰기·셸 도구는 켜지 않습니다.
 - **말투 학습 범위**: 공개 채널의 내 메시지만 씁니다. DM과 비공개 채널은 학습에 쓰지 않습니다.
 - **루프 방지**: 내 메시지와 봇 메시지는 새 처리 대상에서 제외합니다.
 - **전송 직전 재확인**: 자동 전송 전에 스레드가 바뀌었으면 보내지 않습니다.

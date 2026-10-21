@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import fs from 'node:fs';
 import path from 'node:path';
 import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, Notification, screen, shell } from 'electron';
 import { startGateway } from './slack/gateway.js';
@@ -9,7 +10,7 @@ import { createEngine } from './engine.js';
 import { EFFORTS, MODELS } from './llm/claude.js';
 import { SETTINGS, parseGroups, validateSetting } from './ctl/settings.js';
 import { AUTO_ELIGIBLE } from './responder/policy.js';
-import { DB_PATH, migrateLegacyData } from './paths.js';
+import { DB_PATH, NOTES_DIR, migrateLegacyData } from './paths.js';
 import { checkClaude, loadTokens, saveTokens, verifyTokens, type Tokens } from './setup.js';
 import { collectPersona } from './persona/collect.js';
 import { analyzePersona } from './persona/analyze.js';
@@ -17,6 +18,15 @@ import { toParts } from './slack/mrkdwn.js';
 import { WINDOW_MIN, parseWindowState, restoreBounds } from './windowState.js';
 import { buildDeepLink, buildPermalink } from './slack/permalink.js';
 import { SCOPES, buildManifest, createAppUrl, toYaml, type ManifestOptions } from './slack/manifest.js';
+
+// 코드 보고 다시 쓰기가 남긴 조사 노트 수 (설정 화면 안내용)
+function countNotes(): number {
+  try {
+    return fs.readdirSync(NOTES_DIR).filter((f) => f.endsWith('.md')).length;
+  } catch {
+    return 0;
+  }
+}
 
 async function boot() {
   migrateLegacyData(); // 이름이 slmmury이던 때의 데이터 폴더를 옮긴다. DB를 열기 전에
@@ -38,6 +48,7 @@ async function boot() {
     efforts: EFFORTS,
     autoEligible: AUTO_ELIGIBLE,
     autoScope: loadMyScope(), // 말투 분석이 뽑은 담당 업무 (설정 화면 안내용)
+    codeNotes: countNotes(),
     openDrafts: store.listOpenDrafts(),
     watches: store.listWatches(),
     timers: engine?.timers() ?? { judge: {}, running: [], send: {} },
@@ -121,6 +132,11 @@ async function boot() {
     if (response === 0) ready().forget(key);
   });
   ipcMain.handle('draft:request', (_ev, key: string, hint: string, withCode: boolean) => ready().requestDraft(key, hint, withCode));
+  ipcMain.handle('notes:open', async () => {
+    fs.mkdirSync(NOTES_DIR, { recursive: true });
+    const err = await shell.openPath(NOTES_DIR);
+    if (err) throw new Error(err);
+  });
   // 설정의 "폴더 추가". 취소하면 빈 배열
   ipcMain.handle('dialog:pickFolders', async () => {
     const r = await dialog.showOpenDialog(win, { properties: ['openDirectory', 'multiSelections'] });
