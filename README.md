@@ -205,6 +205,7 @@ Slack ──Socket Mode──▶ gateway ──▶ engine ──▶ store (SQLit
    | `dm` / `group_dm` | DM / 그룹 DM (자동 감지 on일 때) |
    | `mention` | 나를 멘션 |
    | `group_mention` | 내가 속한 사용자 그룹을 멘션 |
+   | `my_thread` | 내가 쓴 글에 달린 스레드 답글. 멘션이 없어도 통과. Slack이 알려주는 원글 작성자(`parent_user_id`)로 판단해서 앱을 켜기 전에 쓴 글도 해당 |
 
 5. **예약** (`schedule`): 감시에 등록하고 판단을 예약합니다.
    - **urgent**(DM, 나를 부른 메시지): 새 메시지가 오면 다시 잽니다. 기본 10초.

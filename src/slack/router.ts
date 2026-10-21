@@ -10,9 +10,10 @@ export type MessageEvent = {
   text?: string;
   ts: string;
   thread_ts?: string;
+  parent_user_id?: string; // 스레드 답글이면 원글 작성자
 };
 
-export type RouteReason = 'dm' | 'group_dm' | 'mention' | 'group_mention' | 'watched';
+export type RouteReason = 'dm' | 'group_dm' | 'mention' | 'group_mention' | 'my_thread' | 'watched';
 
 // <!subteam^S123> 또는 <!subteam^S123|@handle>
 export function mentionsGroup(text: string | undefined, groupIds: string[]): boolean {
@@ -45,6 +46,8 @@ export function route(
   if (event.channel_type === 'mpim') return 'group_dm';
   if (event.text?.includes(`<@${myUserId}>`)) return 'mention';
   if (mentionsGroup(event.text, opts.mentionGroups ?? [])) return 'group_mention';
+  // 내가 쓴 글에 달린 답글. 앱을 켜기 전에 쓴 글이어도 Slack이 원글 작성자를 알려준다
+  if (event.thread_ts && event.parent_user_id === myUserId) return 'my_thread';
   return null;
 }
 

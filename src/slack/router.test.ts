@@ -40,6 +40,15 @@ test('자동 감지 OFF면 DM·멘션도 무시', () => {
   assert.equal(route({ ...base, channel_type: 'channel', text: `<@${ME}>` }, ME, manual), null);
 });
 
+test('내가 쓴 글의 스레드 답글은 멘션이 없어도 my_thread', () => {
+  const reply = { ...base, channel_type: 'channel', ts: '2.0', thread_ts: '1.0', parent_user_id: ME };
+  assert.equal(route(reply, ME, auto), 'my_thread');
+  assert.equal(route({ ...reply, text: `<@${ME}> 이거요` }, ME, auto), 'mention'); // 나를 부르면 mention이 먼저
+  assert.equal(route({ ...reply, parent_user_id: 'UOTHER' }, ME, auto), null); // 남의 글 스레드
+  assert.equal(route({ ...reply, user: ME }, ME, auto), null); // 내 답글
+  assert.equal(route(reply, ME, manual), null); // 자동 감지 OFF
+});
+
 test('감시 스레드의 답글은 멘션 없이도, 자동 감지 OFF여도 watched', () => {
   const ev = { ...base, channel_type: 'channel', thread_ts: '0.5', ts: '1.0' };
   const watched = { autoDetect: false, isWatched: (k: string) => k === 'C1:0.5' };
