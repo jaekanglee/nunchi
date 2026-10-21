@@ -3,3 +3,14 @@ dist/
 .env
 data/
 .DS_Store
+
+# 앱 런타임 자료(DB·말투 데이터·조사 노트·토큰·로그)는 저장소 밖 데이터 폴더에 있다. 실수로 복사돼도 올라가지 않게
+*.db
+*.db-*
+*.sqlite
+*.log
+*.pid
+*.bundle
+credentials.json
+/persona/
+/code-notes/
