@@ -30,8 +30,8 @@ export async function judgeTurn(
   persona: Persona,
   myUserId: string,
   llm: Llm,
-  opts: { system?: string; myScope?: string } = {},
+  opts: { system?: string; myScope?: string; myGuide?: string } = {},
 ): Promise<ClaudeResult<Judgment>> {
-  const { context, conversation } = buildPrompt(thread, persona, myUserId, opts.myScope);
+  const { context, conversation } = buildPrompt(thread, persona, myUserId, opts.myScope, opts.myGuide);
   return runClaude<Judgment>({ system: `${opts.system ?? SYSTEM}\n\n${context}`, prompt: conversation, schema: SCHEMA, llm });
 }

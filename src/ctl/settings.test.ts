@@ -56,3 +56,11 @@ test('프로젝트 폴더: 줄마다 절대 경로 하나, 없으면 none', () =
   assert.deepEqual(parseDirs('/a\n/b c'), ['/a', '/b c']);
   assert.deepEqual(parseDirs('none'), []);
 });
+
+test('내 지침: 여러 줄 2000자까지, 공백으로 시작하면 안 되고, 없으면 none', () => {
+  assert.equal(SETTINGS.myGuide.fallback, 'none');
+  assert.equal(validateSetting('myGuide', '배포 일정은 확답하지 않는다\n\n- 금요일 오후 질문은 월요일로'), null);
+  assert.equal(validateSetting('myGuide', 'a'.repeat(2000)), null);
+  assert.match(validateSetting('myGuide', 'a'.repeat(2001))!, /쓸 수 없는 값/);
+  assert.match(validateSetting('myGuide', ' 앞 공백')!, /쓸 수 없는 값/);
+});

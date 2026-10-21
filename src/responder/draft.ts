@@ -70,8 +70,8 @@ export function loadPersona(dir = PERSONA_DIR): Persona {
 
 // request: 내가 화면에서 직접 요청한 초안이면 해야 할 일. 이때는 차례 판단과 상관없이 답장을 쓴다
 // code: 이 대화에서 코드로 확인한 사실. 도구 없이 user 프롬프트에만 붙여 system 캐시(말투 데이터)를 일반 초안과 같이 쓴다
-export async function generateDraft(thread: ThreadMessage[], persona: Persona, myUserId: string, llm?: Llm, request?: string, myScope?: string, code?: CodeContext): Promise<ClaudeResult<DraftResult>> {
-  const { context, conversation } = buildPrompt(thread, persona, myUserId, myScope);
+export async function generateDraft(thread: ThreadMessage[], persona: Persona, myUserId: string, llm?: Llm, request?: string, myScope?: string, code?: CodeContext, myGuide?: string): Promise<ClaudeResult<DraftResult>> {
+  const { context, conversation } = buildPrompt(thread, persona, myUserId, myScope, myGuide);
   const asked = request === undefined ? '' : `\n\n# 내가 직접 요청한 초안\n지금 이 대화에 내가 답장을 보내려 한다. needs_my_reply는 true로 두고 reply를 반드시 쓴다.${request ? `\n해야 할 일(요약 기준): ${request}` : ''}`;
   return runClaude<DraftResult>({
     system: `${SYSTEM}\n\n${context}`,

@@ -56,3 +56,13 @@ test('myScope: none이면 기존 context와 같고, 값이 같으면 매번 같�
   assert.equal(strip(b.context), base.context);
   assert.equal(a.conversation, base.conversation);
 });
+
+test('내 지침: none이면 기존 context와 같고, 있으면 담당 업무 다음에 여러 줄 그대로 넣는다', () => {
+  const persona: Persona = { styleGuide: 'STYLE', relationships: [], pairs: [] };
+  const t = [{ ts: '1', user: 'UA', name: '서연', text: '질문' }];
+  const base = buildPrompt(t, persona, 'UME', '배송앱');
+  assert.equal(buildPrompt(t, persona, 'UME', '배송앱', 'none').context, base.context);
+  const g = buildPrompt(t, persona, 'UME', '배송앱', '배포 일정은 확답하지 않는다\n금요일 오후 질문은 월요일로 미룬다');
+  assert.match(g.context, /# 내 담당 업무\n배송앱\n\n# 내 지침[^\n]*\n배포 일정은 확답하지 않는다\n금요일 오후 질문은 월요일로 미룬다\n\n# 이 대화 상대와의 관계/);
+  assert.equal(g.conversation, base.conversation);
+});

@@ -1,4 +1,4 @@
-// 이벤트 → 감시 등록 → (디바운스) → 초안 생성 → 정책 결정 → 승인 큐 / 알림 / 자동 전송
+// 이벤트 → 감시 등록 → (판단 대기) → 초안 생성 → 정책 결정 → 승인 큐 / 알림 / 자동 전송
 import type { WebClient } from '@slack/web-api';
 import { addressedToOthersOnly, isUrgent, route, threadKey, type MessageEvent } from './slack/router.js';
 import { parsePermalink } from './slack/permalink.js';
@@ -157,6 +157,7 @@ export function createEngine(deps: EngineDeps) {
   const ms = (key: string) => Number(setting(key)) * 1000;
   // 설정으로 덮어쓰지 않았으면 말투 분석이 뽑은 담당 업무를 쓴다
   const myScope = () => (setting('myScope') !== 'none' ? setting('myScope') : (deps.persona.myScope ?? 'none'));
+  const myGuide = () => setting('myGuide');
   // 자동 전송 기준도 판단할 때마다 읽어서 바로 반영
   const thresholds = () => thresholdsFrom(setting);
 
@@ -168,12 +169,12 @@ export function createEngine(deps: EngineDeps) {
   }
   const unverified = (code: CodeContext | undefined) => (code?.facts.facts.some((f) => !f.verified) ? ['근거 확인 안 된 내용 있음'] : []);
 
-  // urgent(나를 부름·DM)는 디바운스: 새 메시지가 오면 다시 잰다.
-  // batch(나머지 댓글)는 첫 댓글부터 창을 유지한다 (댓글이 계속 와도 무한히 밀리지 않게)
+  // 이미 잡힌 판단 시각은 새 메시지가 와도 미루지 않는다. 그 사이 온 메시지는 그 시각에 대화를 다시 읽어 함께 판단한다
+  // (활발한 스레드에서 디바운스처럼 한참 밀리지 않게). 더 급한 메시지(urgent: 나를 부름·DM)면 앞당긴다
   function schedule(key: string, kind: 'urgent' | 'batch' = 'urgent') {
     const delay = ms(kind === 'urgent' ? 'urgentDelaySec' : 'batchDelaySec');
     const at = Date.now() + delay;
-    if (kind === 'batch' && timers.has(key) && due.get(key)! <= at) return;
+    if (timers.has(key) && due.get(key)! <= at) return;
     clearTimeout(timers.get(key));
     due.set(key, at);
     timers.set(key, setTimeout(() => {
@@ -208,6 +209,10 @@ export function createEngine(deps: EngineDeps) {
       return;
     }
     running.add(key);
+    // 지금 대화를 다시 읽으니, 남아 있던 판단 예약은 이번 판단에 합친다
+    clearTimeout(timers.get(key));
+    timers.delete(key);
+    due.delete(key);
     try {
       if (store.getSetting('paused', 'off') === 'on') return; // 전체 일시정지
       const watch = store.getWatch(key);
@@ -218,9 +223,10 @@ export function createEngine(deps: EngineDeps) {
       const last = thread.at(-1);
       if (!last || last.user === myUserId) return; // 마지막이 내 말이면 내 차례 아님
 
-      // 다른 사람만 콕 집어 부른 메시지는 LLM 없이 건너뛴다. 링크로 직접 등록한 대화는 예외 (LLM이 판단)
+      // 내 마지막 말 뒤에 온 메시지가 모두 다른 사람만 콕 집어 부른 것이면 LLM 없이 건너뛴다. 링크로 직접 등록한 대화는 예외 (LLM이 판단)
       const groups = parseGroups(store.getSetting('mentionGroups', 'none'));
-      if (watch.source !== 'link' && addressedToOthersOnly(last.mentions ?? [], myUserId, groups)) {
+      const fresh = thread.slice(thread.findLastIndex((m) => m.user === myUserId) + 1);
+      if (watch.source !== 'link' && fresh.every((m) => addressedToOthersOnly(m.mentions ?? [], myUserId, groups))) {
         return skipWithoutDraft(key, channel, rootTs, last.ts, '규칙', '다른 사람만 멘션한 메시지라 판단 생략');
       }
       // 채널 스레드의 1차 판단은 싼 모델로. 내 차례일 때만 기본 모델이 다시 판단하고 초안을 쓴다.
@@ -229,7 +235,7 @@ export function createEngine(deps: EngineDeps) {
       const main = llmFor(key, 'draft');
       let judgeCost: number | null = null;
       if (rootTs !== null && judgeModel !== 'off' && judgeModel !== main.model) {
-        const judged = await judge(thread, deps.persona, myUserId, { model: judgeModel, effort: JUDGE_EFFORT }, { myScope: myScope() });
+        const judged = await judge(thread, deps.persona, myUserId, { model: judgeModel, effort: JUDGE_EFFORT }, { myScope: myScope(), myGuide: myGuide() });
         if (gone(key)) return;
         const j = judged.output;
         judgeCost = judged.costUsd;
@@ -238,7 +244,7 @@ export function createEngine(deps: EngineDeps) {
       }
 
       const code = codeFor(key, thread);
-      const drafted = await draft(thread, deps.persona, myUserId, main, undefined, myScope(), code);
+      const drafted = await draft(thread, deps.persona, myUserId, main, undefined, myScope(), code, myGuide());
       const result = drafted.output;
       if (gone(key)) return;
       const sendMode: SendMode = watch.mode === 'draft' ? 'draft' : (store.getSetting('sendMode', 'draft') as SendMode);
@@ -288,7 +294,8 @@ export function createEngine(deps: EngineDeps) {
       console.error(`[engine] ${key} 처리 실패`, err);
     } finally {
       running.delete(key);
-      if (rerun.delete(key)) schedule(key);
+      // 판단하는 동안 판단 시각이 된 새 메시지는 더 기다리지 않고 바로 이어서 판단한다
+      if (rerun.delete(key)) void process(key);
     }
   }
 
@@ -366,7 +373,7 @@ export function createEngine(deps: EngineDeps) {
     const last = thread.at(-1);
     if (!last) throw new Error('대화에 메시지가 없습니다');
     const code = dirs ? await lookIntoCode(key, thread, dirs) : codeFor(key, thread);
-    const drafted = await draft(thread, deps.persona, myUserId, llmFor(key, 'draft'), hint, myScope(), code);
+    const drafted = await draft(thread, deps.persona, myUserId, llmFor(key, 'draft'), hint, myScope(), code, myGuide());
     const result = drafted.output;
     if (!result.reply) throw new Error('초안을 만들지 못했습니다');
     const t = thresholds();

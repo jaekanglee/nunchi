@@ -268,3 +268,136 @@ test('자동 판단: 코드로 확인한 내용이 들어간 초안은 자동 �
   assert.equal(d.code_findings_id, drafted[0]!.facts.id);
   assert.match(d.hold_reason!, /코드로 확인한 내용 포함/);
 });
+
+test('내 지침: 설정하면 1차 판단과 초안에 넘긴다', async () => {
+  const seen: (string | undefined)[] = [];
+  const store = openStore(':memory:');
+  const client = { search: { messages: async () => ({ messages: { matches: [] } }) } } as unknown as WebClient;
+  const engine = createEngine({
+    client,
+    myUserId: 'UME',
+    store,
+    readConversation: { read: async () => [msg('1700000000.000100')], nameOf: async (u: string) => u },
+    persona: { styleGuide: 'S', relationships: [], pairs: [] },
+    notify: () => {},
+    onChange: () => {},
+    judge: async (_t, _p, _me, _llm, opts): Promise<ClaudeResult<Judgment>> => {
+      seen.push(`judge:${opts?.myGuide}`);
+      return { output: { needs_my_reply: true, reason: 'r', topic: 't' }, costUsd: 0, usage };
+    },
+    draft: async (_t, _p, _me, _llm, _req, _scope, _code, guide): Promise<ClaudeResult<DraftResult>> => {
+      seen.push(`draft:${guide}`);
+      return { output: { needs_my_reply: false, category: '정보질문', risk: 10, needs_facts_i_dont_know: false, confidence: 0.9, reply: '', reason: 'r', topic: 't' }, costUsd: 0, usage };
+    },
+  });
+  await engine.addLink(LINK);
+  store.setSetting('myGuide', '배포 일정은 확답하지 않는다');
+  await engine.addLink(LINK);
+  assert.deepEqual(seen, ['judge:none', 'draft:none', 'judge:배포 일정은 확답하지 않는다', 'draft:배포 일정은 확답하지 않는다']);
+});
+
+// 실시간 이벤트로 판단 예약을 보는 대역. 시계는 테스트가 mock.timers로 움직인다
+function liveSetup(thread: { current: ThreadMessage[] }, opts: { slowDraft?: boolean } = {}) {
+  const store = openStore(':memory:');
+  const judged: string[][] = [];
+  const drafted: string[][] = [];
+  let release: (() => void) | undefined;
+  const client = { search: { messages: async () => ({ messages: { matches: [] } }) } } as unknown as WebClient;
+  const engine = createEngine({
+    client,
+    myUserId: 'UME',
+    store,
+    readConversation: { read: async () => thread.current, nameOf: async (u: string) => u },
+    persona: { styleGuide: 'S', relationships: [], pairs: [] },
+    notify: () => {},
+    onChange: () => {},
+    judge: async (t): Promise<ClaudeResult<Judgment>> => {
+      judged.push(t.map((m) => m.ts));
+      return { output: { needs_my_reply: false, reason: 'r', topic: 't' }, costUsd: 0, usage };
+    },
+    draft: async (t): Promise<ClaudeResult<DraftResult>> => {
+      drafted.push(t.map((m) => m.ts));
+      if (opts.slowDraft && drafted.length === 1) await new Promise<void>((r) => (release = r));
+      return { output: { needs_my_reply: false, category: '정보질문', risk: 10, needs_facts_i_dont_know: false, confidence: 0.9, reply: '', reason: 'r', topic: 't' }, costUsd: 0, usage };
+    },
+  });
+  return { store, engine, judged, drafted, release: () => release!() };
+}
+const flush = async () => {
+  for (let i = 0; i < 30; i++) await new Promise((r) => setImmediate(r));
+};
+const dm = (ts: string) => ({ type: 'message', channel: 'D1', channel_type: 'im', user: 'UA', text: ts, ts });
+const said = (ts: string, user: string, mentions: string[] = []): ThreadMessage => ({ ts, user, name: user, text: ts, mentions });
+
+test('판단 대기 중에 새 메시지가 와도 판단 시각을 미루지 않고, 그 시각에 함께 판단한다', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: 1_700_000_000_000 });
+  const thread = { current: [said('1700000000.000100', 'UA')] };
+  const { engine, drafted } = liveSetup(thread);
+  await engine.handleEvent(dm('1700000000.000100'));
+  const due = engine.timers().judge['D1:dm'];
+  assert.equal(due, 1_700_000_010_000);
+  t.mock.timers.tick(6000);
+  thread.current = [...thread.current, said('1700000006.000000', 'UA')];
+  await engine.handleEvent(dm('1700000006.000000'));
+  assert.equal(engine.timers().judge['D1:dm'], due);
+  t.mock.timers.tick(4000);
+  await flush();
+  assert.deepEqual(drafted, [['1700000000.000100', '1700000006.000000']]);
+});
+
+test('모으던 댓글보다 급한 메시지가 오면 판단을 앞당긴다', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: 1_700_000_000_000 });
+  const { store, engine } = liveSetup({ current: [said('1700000000.000100', 'UA')] });
+  store.addWatch(KEY, 'C1', '1700000000.000100', 'mention');
+  const reply = (ts: string, text: string) => ({ type: 'message', channel: 'C1', channel_type: 'channel', user: 'UB', text, ts, thread_ts: '1700000000.000100' });
+  await engine.handleEvent(reply('1700000001.000000', '그냥 댓글'));
+  assert.equal(engine.timers().judge[KEY], 1_700_000_120_000);
+  await engine.handleEvent(reply('1700000002.000000', '<@UME> 봐주세요'));
+  assert.equal(engine.timers().judge[KEY], 1_700_000_010_000);
+});
+
+test('판단하는 동안 온 메시지는 그 판단이 끝난 뒤 이어서 판단한다 (판단 시각이 지났으면 바로)', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: 1_700_000_000_000 });
+  const thread = { current: [said('1700000000.000100', 'UA')] };
+  const { engine, drafted, release } = liveSetup(thread, { slowDraft: true });
+  await engine.handleEvent(dm('1700000000.000100'));
+  t.mock.timers.tick(10_000);
+  await flush();
+  assert.equal(drafted.length, 1); // 첫 판단이 아직 진행 중
+  thread.current = [...thread.current, said('1700000011.000000', 'UA')];
+  await engine.handleEvent(dm('1700000011.000000'));
+  t.mock.timers.tick(30_000); // 새 메시지의 판단 시각이 지났지만 첫 판단이 아직 안 끝났다
+  await flush();
+  assert.equal(drafted.length, 1);
+  thread.current = [...thread.current, said('1700000041.000000', 'UA')];
+  await engine.handleEvent(dm('1700000041.000000')); // 이 메시지의 판단 예약은 아직 남아 있다
+  release();
+  await flush();
+  assert.deepEqual(drafted[1], ['1700000000.000100', '1700000011.000000', '1700000041.000000']);
+  // 이어서 한 판단이 대화를 다시 읽으며 남은 예약까지 합쳤으니, 같은 내용으로 또 판단하지 않는다
+  t.mock.timers.tick(10_000);
+  await flush();
+  assert.equal(drafted.length, 2);
+  assert.equal(engine.timers().judge['D1:dm'], undefined);
+});
+
+test('다른 사람만 부른 메시지라도, 내 마지막 말 뒤에 나를 부른 메시지가 함께 있으면 규칙으로 건너뛰지 않는다', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: 1_700_000_000_000 });
+  const root = '1700000000.000100';
+  const thread = { current: [said(root, 'UA', ['UME']), said('1700000001.000000', 'UB', ['UC'])] };
+  const { store, engine, judged } = liveSetup(thread);
+  store.addWatch(KEY, 'C1', root, 'mention');
+  const event = { type: 'message', channel: 'C1', channel_type: 'channel', user: 'UB', text: '<@UC> 점심?', ts: '1700000001.000000', thread_ts: root };
+  await engine.handleEvent(event);
+  t.mock.timers.tick(120_000);
+  await flush();
+  assert.equal(judged.length, 1);
+
+  // 나를 부른 메시지에 내가 이미 답했으면, 그 뒤 다른 사람만 부른 메시지는 규칙으로 건너뛴다
+  thread.current = [said(root, 'UA', ['UME']), said('1700000001.000000', 'UME'), said('1700000002.000000', 'UB', ['UC'])];
+  await engine.handleEvent({ ...event, ts: '1700000002.000000' });
+  t.mock.timers.tick(120_000);
+  await flush();
+  assert.equal(judged.length, 1);
+  assert.equal(store.listDraftsByKey(KEY).at(-1)!.category, '규칙');
+});

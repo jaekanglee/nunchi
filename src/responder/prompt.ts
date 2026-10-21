@@ -17,10 +17,12 @@ export function pickExamples(pairs: Pair[], partnerIds: string[], n: number): Pa
 // context(말투·관계·예시)는 system 프롬프트로, conversation(대화)은 user 메시지로 보낸다.
 // 같은 대화에 댓글이 붙어도 context는 그대로라 프롬프트 캐시(1시간)를 다시 쓴다.
 // 하나의 user 메시지로 합치면 끝에 댓글 하나만 붙어도 캐시 전체가 무효가 된다 (실측: 호출당 비용 약 7배)
-// myScope가 none이면 섹션이 없어 기존 context와 바이트 단위로 같다
-export function buildPrompt(thread: ThreadMessage[], persona: Persona, myUserId: string, myScope = 'none'): { context: string; conversation: string } {
+// myScope·myGuide가 none이면 섹션이 없어 기존 context와 바이트 단위로 같다
+export function buildPrompt(thread: ThreadMessage[], persona: Persona, myUserId: string, myScope = 'none', myGuide = 'none'): { context: string; conversation: string } {
   const scope = myScope.trim();
   const scopeSection = scope && scope !== 'none' ? ['', '# 내 담당 업무', scope] : [];
+  const guide = myGuide.trim();
+  const guideSection = guide && guide !== 'none' ? ['', '# 내 지침 (내가 직접 정한 규칙. 말투 가이드·예시와 다르면 이 지침을 따른다)', guide] : [];
   const partnerIds = [...new Set(thread.map((m) => m.user).filter((u) => u !== myUserId))];
   const relations = persona.relationships.filter((r) => partnerIds.includes(r.user_id));
   const examples = pickExamples(persona.pairs, partnerIds, 12);
@@ -33,6 +35,7 @@ export function buildPrompt(thread: ThreadMessage[], persona: Persona, myUserId:
     '# 내 말투 가이드',
     persona.styleGuide,
     ...scopeSection,
+    ...guideSection,
     '',
     '# 이 대화 상대와의 관계',
     relations.length ? relations.map((r) => `- ${r.name}: ${r.register}, ${r.tone} ${r.notes}`).join('\n') : '- 기록 없음 (말투 가이드의 기본값을 따른다)',
