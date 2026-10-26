@@ -99,3 +99,8 @@ test('자동 전송 프리셋: 보통은 기본값, 값은 설정 범위 안, �
     assert.ok(Number(a.values.autoMinConfidence) > Number(b.values.autoMinConfidence));
   }
 });
+
+test('자동 퇴근 시각: HH:MM(24시간) 또는 none', () => {
+  for (const v of ['19:00', '00:00', '23:59', 'none']) assert.equal(validateSetting('autoOffAt', v), null, v);
+  for (const v of ['25:00', '7:00', '19:60', '']) assert.ok(validateSetting('autoOffAt', v), v);
+});

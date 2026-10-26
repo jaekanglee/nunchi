@@ -18,7 +18,8 @@ type SettingDef = {
 export const AUTO_TARGETS = ['dm', 'group_dm', 'channel'] as const;
 
 export const SETTINGS: Record<string, SettingDef> = {
-  paused: { values: ['on', 'off'], fallback: 'off', desc: '전체 일시정지 (on이면 판단·초안·자동 전송 모두 멈춤)' },
+  paused: { values: ['on', 'off'], fallback: 'off', desc: '퇴근 (on이면 판단·초안·자동 전송을 모두 멈추고 메시지는 목록에만 쌓음. 밀린 대화 정리는 앱의 출근 버튼)' },
+  autoOffAt: { pattern: /^(none|([01]\d|2[0-3]):[0-5]\d)$/, fallback: 'none', desc: '자동 퇴근 시각 (HH:MM, 24시간). 이 시각이 지나면 퇴근 처리한다. 출근은 직접 누른다 (없으면 none)' },
   autoDetect: { values: ['on', 'off'], fallback: 'on', desc: '자동 감지 (off면 링크로 등록한 대화만)' },
   sendMode: { values: ['draft', 'auto'], fallback: 'draft', desc: '전송 방식' },
   model: { values: MODELS, fallback: 'claude-sonnet-5-5', desc: '기본 모델' },
