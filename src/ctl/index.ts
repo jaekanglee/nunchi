@@ -1,7 +1,7 @@
 // 원격 제어 CLI. 퇴근 후 SSH로 들어와서 앱 설정을 바꾼다. 앱은 설정을 매번 DB에서 읽으므로 즉시 반영된다.
 // 사용: npm run ctl -- <명령>
 //   status                       현재 설정, 감시 중인 대화, 처리 필요 초안
-//   pause | resume               전체 일시정지 / 재개
+//   pause | resume               퇴근 / 근무 재개 (밀린 대화 정리는 앱의 출근 버튼)
 //   set <설정> <값>               예) set sendMode draft
 //   watch <번호|키> <on|draft|off> 대화별 모드
 //   drafts                       처리 필요 초안 본문까지 보기

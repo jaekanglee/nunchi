@@ -9,6 +9,7 @@ contextBridge.exposeInMainWorld('nunchi', {
   getConversation: (key: string) => ipcRenderer.invoke('conversation:get', key),
   summarize: (key: string) => ipcRenderer.invoke('summary:run', key),
   summarizeStale: () => ipcRenderer.invoke('summary:runStale'),
+  clockIn: () => ipcRenderer.invoke('work:clockIn'),
   addLink: (url: string) => ipcRenderer.invoke('link:add', url),
   sendDraft: (id: number, text: string) => ipcRenderer.invoke('draft:send', id, text),
   reply: (key: string, text: string) => ipcRenderer.invoke('message:reply', key, text),

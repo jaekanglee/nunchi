@@ -10,6 +10,7 @@ import { createEngine } from './engine.js';
 import { EFFORTS, MODELS } from './llm/claude.js';
 import { RISK_PRESETS, SETTINGS, parseDirs, parseGroups, parseKeywordMap, validateSetting } from './ctl/settings.js';
 import { cachedProjects } from './projects.js';
+import { crossedTime } from './workClock.js';
 import { AUTO_ELIGIBLE } from './responder/policy.js';
 import { DB_PATH, NOTES_DIR, migrateLegacyData } from './paths.js';
 import { checkClaude, loadTokens, saveTokens, verifyTokens, type Tokens } from './setup.js';
@@ -158,6 +159,7 @@ async function boot() {
   });
   ipcMain.handle('summary:run', (_ev, key: string) => ready().summarize(key));
   ipcMain.handle('summary:runStale', () => ready().summarizeStale());
+  ipcMain.handle('work:clockIn', () => ready().clockIn());
   ipcMain.handle('link:add', (_ev, url: string) => ready().addLink(url));
   ipcMain.handle('draft:send', (_ev, id: number, text: string) => ready().send(id, text));
   ipcMain.handle('message:reply', (_ev, key: string, text: string) => ready().reply(key, text));
@@ -274,6 +276,19 @@ async function boot() {
     updateBadge();
   };
   updateBadge();
+
+  // 자동 퇴근: 지난번 확인 뒤 퇴근 시각이 지났고 근무 중이면 퇴근 처리한다. 출근은 직접 누른다
+  let lastClockCheck = new Date();
+  setInterval(() => {
+    const now = new Date();
+    const at = store.getSetting('autoOffAt', 'none');
+    if (at !== 'none' && store.getSetting('paused', 'off') === 'off' && crossedTime(lastClockCheck, now, at)) {
+      store.setSetting('paused', 'on');
+      new Notification({ title: '퇴근 처리했습니다', body: '출근을 누를 때까지 판단·초안·자동 전송을 멈춥니다' }).show();
+      onChange();
+    }
+    lastClockCheck = now;
+  }, 30_000);
 
   // 토큰과 말투 데이터가 준비돼야 Slack에 연결한다. 없으면 화면이 설정 단계를 보여준다
   async function start() {
