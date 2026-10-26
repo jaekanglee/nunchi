@@ -536,3 +536,45 @@ for (const [name, channel, channelType, label] of [['DM', 'D1', 'im', 'DM'], ['�
     assert.equal((await run()).status, 'scheduled');
   });
 }
+
+test('출근: 밀린 대화(아직 판단 안 한 남의 말이 마지막)만 골라 초안은 승인 대기로, 알림 없이, 요약까지 만든다', async () => {
+  const store = openStore(':memory:');
+  const notified: string[] = [];
+  const summarized: string[] = [];
+  const client = { search: { messages: async () => ({ messages: { matches: [] } }) } } as unknown as WebClient;
+  const engine = createEngine({
+    client,
+    myUserId: 'UME',
+    store,
+    readConversation: { read: async () => [said('1700000000.000100', 'UA')], nameOf: async (u: string) => u },
+    persona: { styleGuide: 'S', relationships: [], pairs: [] },
+    notify: (title) => notified.push(title),
+    onChange: () => {},
+    draft: async (): Promise<ClaudeResult<DraftResult>> => ({
+      output: { needs_my_reply: true, category: '인사/잡담', risk: 5, needs_facts_i_dont_know: false, confidence: 0.95, reply: '안녕하세요', reason: 'r', topic: 't' },
+      costUsd: 0,
+      usage,
+    }),
+    summarize: async (t): Promise<ClaudeResult<ConversationSummary>> => {
+      summarized.push(t[0].ts);
+      return { output: { topic: 't', headline: '', points: [], my_todos: [], waiting_on_me: false, waiting_reason: '', next_action: '' }, costUsd: 0, usage };
+    },
+  });
+  store.setSetting('sendMode', 'auto');
+  store.setSetting('paused', 'on');
+  for (const k of ['D1', 'D2', 'D3', 'D4']) store.addWatch(`${k}:dm`, k, null, 'mention');
+  store.setLastMessage('D2:dm', '1700000000.000100', '나', '넵'); // 내 말이 마지막
+  store.setWatchMode('D3:dm', 'off'); // 끈 대화
+  store.setLastMessage('D4:dm', '1700000000.000100', 'UA', '?'); // 이미 판단함
+  store.insertDraft({ key: 'D4:dm', channel: 'D4', root_ts: null, basis_ts: '1700000000.000100', category: '규칙', risk: 0, confidence: 1, reason: 'r', draft_text: '', status: 'skipped', hold_reason: null });
+
+  assert.equal(engine.clockIn(), 1);
+  assert.equal(store.getSetting('paused', 'off'), 'off');
+  await flush();
+  const d = store.listDraftsByKey('D1:dm').at(-1)!;
+  assert.equal(d.status, 'pending');
+  assert.match(d.hold_reason!, /퇴근 중 온 메시지/);
+  assert.deepEqual(notified, []);
+  assert.equal(summarized.length, 1);
+  assert.equal(store.listDraftsByKey('D2:dm').length + store.listDraftsByKey('D3:dm').length, 0);
+});

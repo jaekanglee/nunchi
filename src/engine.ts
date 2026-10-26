@@ -214,7 +214,7 @@ export function createEngine(deps: EngineDeps) {
     deps.onChange();
   }
 
-  async function process(key: string) {
+  async function process(key: string, held = false) {
     if (running.has(key)) {
       rerun.add(key);
       return;
@@ -267,10 +267,12 @@ export function createEngine(deps: EngineDeps) {
       // 자동 전송할 대화 종류에서 뺀 대화(예: DM)도 승인 대기
       const kind = conversationKind(channel, rootTs);
       const offTarget = !parseList(setting('autoTargets')).includes(kind);
-      if ((code || byKeyword || offTarget) && decision === 'auto') decision = 'approve';
+      // 출근 처리(held)한 밀린 대화도 맥락이 오래돼 자동으로 보내지 않는다
+      if ((code || byKeyword || offTarget || held) && decision === 'auto') decision = 'approve';
       store.setWatchTopic(key, result.topic, true);
       // 대화별 '초안만'과 전역 초안 모드를 구분해서 보여준다
       const hold = [
+        ...(held ? ['퇴근 중 온 메시지'] : []),
         ...holdReasons(result, sendMode, t).map((r) => (r === '전송 설정이 초안 모드' && watch.mode === 'draft' ? "이 대화가 '초안만'" : r)),
         ...(code ? ['코드로 확인한 내용 포함', ...unverified(code)] : []),
         ...(byKeyword ? ['키워드로 감지한 대화'] : []),
@@ -296,8 +298,9 @@ export function createEngine(deps: EngineDeps) {
         ...costFields(drafted),
       });
 
-      if (decision === 'escalate') deps.notify(`⚠️ 직접 확인 필요 · ${last.name}`, `${last.text}\n— ${result.reason}`);
-      if (decision === 'approve') deps.notify(`초안 승인 대기 · ${last.name}`, `${result.reply}\n— 자동 전송 안 함: ${hold.join(' · ')}`);
+      // 출근 처리 중에는 대화마다 알림을 띄우지 않는다 (사용자가 이미 자리에 있다)
+      if (!held && decision === 'escalate') deps.notify(`⚠️ 직접 확인 필요 · ${last.name}`, `${last.text}\n— ${result.reason}`);
+      if (!held && decision === 'approve') deps.notify(`초안 승인 대기 · ${last.name}`, `${result.reply}\n— 자동 전송 안 함: ${hold.join(' · ')}`);
       if (decision === 'auto') {
         const [min, max] = [ms('autoSendMinSec'), ms('autoSendMaxSec')].sort((a, b) => a - b);
         const delay = min + Math.random() * (max - min);
@@ -514,6 +517,18 @@ export function createEngine(deps: EngineDeps) {
 
     summarize,
     summarizeStale,
+
+    // 출근: 퇴근을 풀고, 밀린 대화(아직 판단 안 한 남의 말이 마지막)마다 초안(승인 대기)과 요약을 만든다. 처리는 뒤에서 하고 개수만 돌려준다
+    clockIn(): number {
+      store.setSetting('paused', 'off');
+      const keys = store.listWatches().filter((w) => w.reply_state === 'unknown').map((w) => w.key);
+      for (const key of keys)
+        void process(key, true)
+          .then(() => summarize(key))
+          .catch((err) => console.error(`[출근] ${key} 요약 실패`, err));
+      deps.onChange();
+      return keys.length;
+    },
 
     requestDraft(key: string, hint: string, withCode = false) {
       return track(drafting, key, () => requestDraftNow(key, hint, withCode));
