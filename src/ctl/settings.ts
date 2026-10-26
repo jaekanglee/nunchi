@@ -45,6 +45,17 @@ export const SETTINGS: Record<string, SettingDef> = {
   projectDirs: { pattern: /^(none|(\/|[A-Za-z]:\\)[^\n]*(\n(\/|[A-Za-z]:\\)[^\n]*)*)$/, fallback: 'none', desc: "내 프로젝트 폴더. 키워드로 판단·감지에 쓰고 '코드 보고 다시 쓰기'가 코드를 읽는다 (절대 경로, 줄바꿈으로 여러 개, 없으면 none)" },
 };
 
+// 자동 전송 기준 프리셋 (설정 화면의 칩). 값은 설정 저장 단위(확신은 %). 보통은 기본값을 따라간다
+type RiskValues = { autoMaxRisk: string; escalateRisk: string; autoMinConfidence: string };
+export const RISK_PRESETS: { id: string; label: string; desc: string; values: RiskValues }[] = [
+  { id: 'careful', label: '신중', desc: '확실히 안전한 것만 보내고, 조금만 애매해도 알립니다', values: { autoMaxRisk: '10', escalateRisk: '40', autoMinConfidence: '90' } },
+  {
+    id: 'normal', label: '보통', desc: '가벼운 답장은 보내고, 위험해 보이면 알립니다',
+    values: { autoMaxRisk: SETTINGS.autoMaxRisk.fallback, escalateRisk: SETTINGS.escalateRisk.fallback, autoMinConfidence: SETTINGS.autoMinConfidence.fallback },
+  },
+  { id: 'bold', label: '적극', desc: '웬만한 건 보내고, 정말 위험할 때만 알립니다', values: { autoMaxRisk: '35', escalateRisk: '75', autoMinConfidence: '70' } },
+];
+
 export function parseList(value: string): string[] {
   return value === 'none' ? [] : value.split(',').filter(Boolean);
 }

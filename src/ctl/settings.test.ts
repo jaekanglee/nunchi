@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { SETTINGS, parseDirs, parseGroups, parseKeywordMap, thresholdsFrom, validateSetting } from './settings.js';
+import { RISK_PRESETS, SETTINGS, parseDirs, parseGroups, parseKeywordMap, thresholdsFrom, validateSetting } from './settings.js';
 import { DEFAULT_THRESHOLDS } from '../responder/policy.js';
 
 test('허용된 키·값만 통과', () => {
@@ -83,4 +83,19 @@ test('자동 전송할 대화 종류: 기본은 DM·그룹 DM·채널 스레드 
   assert.equal(validateSetting('autoTargets', 'channel'), null);
   assert.equal(validateSetting('autoTargets', 'none'), null);
   assert.match(validateSetting('autoTargets', 'dm,email')!, /쓸 수 없는 값/);
+});
+
+test('자동 전송 프리셋: 보통은 기본값, 값은 설정 범위 안, 신중→적극으로 느슨해짐', () => {
+  assert.deepEqual(RISK_PRESETS.map((p) => p.label), ['신중', '보통', '적극']);
+  const [careful, normal, bold] = RISK_PRESETS;
+  for (const [k, v] of Object.entries(normal.values)) assert.equal(v, SETTINGS[k].fallback, k);
+  for (const p of RISK_PRESETS) {
+    for (const [k, v] of Object.entries(p.values)) assert.equal(validateSetting(k, v), null, `${p.label} ${k}`);
+    assert.ok(Number(p.values.autoMaxRisk) <= Number(p.values.escalateRisk), p.label);
+  }
+  for (const [a, b] of [[careful, normal], [normal, bold]]) {
+    assert.ok(Number(a.values.autoMaxRisk) < Number(b.values.autoMaxRisk));
+    assert.ok(Number(a.values.escalateRisk) < Number(b.values.escalateRisk));
+    assert.ok(Number(a.values.autoMinConfidence) > Number(b.values.autoMinConfidence));
+  }
 });
