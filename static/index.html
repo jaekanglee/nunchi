@@ -36,10 +36,9 @@
     .spacer { flex: 1; -webkit-app-region: drag; align-self: stretch; }
     .ctl { display: flex; align-items: center; gap: 4px; background: var(--panel-2); border-radius: 8px; padding: 2px 2px 2px 8px; color: var(--sub); font-size: 12px; white-space: nowrap; }
     .ctl select { border: 0; background: transparent; padding: 5px 0; font-weight: 600; color: var(--text); outline: none; cursor: pointer; }
-    .status { display: flex; align-items: center; gap: 6px; padding: 2px 6px 2px 10px; border-radius: 999px; font-weight: 600; background: var(--green-soft); color: var(--green); }
+    .status { display: flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 999px; font-weight: 600; background: var(--green-soft); color: var(--green); }
     .status::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: currentColor; box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 25%, transparent); }
     .status.paused { background: var(--amber-soft); color: var(--amber); }
-    .status select { border: 0; background: transparent; font-weight: 600; color: inherit; outline: none; cursor: pointer; padding: 4px 0; }
 
     .btn { border: 1px solid var(--line); background: var(--panel); border-radius: 8px; padding: 5px 12px; cursor: pointer; white-space: nowrap; font-weight: 500; transition: background .12s, border-color .12s; }
     .btn:hover { background: var(--panel-2); }
@@ -312,7 +311,8 @@
 <body>
   <header class="topbar">
     <div class="brand"><img src="../assets/icon.png" alt="" />Nunchi</div>
-    <label class="status" id="statusPill"><select id="paused"><option value="off">실행 중</option><option value="on">일시정지</option></select></label>
+    <span class="status" id="statusPill"></span>
+    <button id="work" class="btn"></button>
     <label class="ctl">감지 <select id="autoDetect"><option value="on">멘션·DM 자동</option><option value="off">링크만</option></select></label>
     <label class="ctl">전송 <select id="sendMode"><option value="draft">초안만</option><option value="auto">자동</option></select></label>
     <div class="spacer"></div>
@@ -426,6 +426,7 @@
         <div class="hint">메시지가 온 뒤 언제 판단할지 정합니다. 링크로 등록한 대화는 등록하자마자 판단합니다. 판단하는 중에 온 메시지는 그 판단이 끝나면 이어서 판단합니다.</div>
         <div class="srow"><div><b>나를 부른 메시지 · DM</b><small>첫 메시지부터 이만큼 기다렸다 판단합니다. 그 사이 온 메시지는 기다림을 늘리지 않고 함께 판단합니다</small></div><span class="numbox"><input type="number" id="urgentDelaySec" min="3" max="600" />초</span></div>
         <div class="srow"><div><b>눈치 보는 스레드의 나머지 댓글</b><small>첫 댓글부터 이만큼 모았다가 한 번에 판단합니다. 길수록 호출이 줄어듭니다</small></div><span class="numbox"><input type="number" id="batchDelaySec" min="10" max="3600" />초</span></div>
+        <div class="srow"><div><b>자동 퇴근</b><small>이 시각이 지나면 퇴근 처리합니다. 퇴근 중에는 AI를 쓰지 않고 메시지만 쌓아 둡니다. 출근은 직접 누릅니다. 비우면 끕니다</small></div><span class="numbox"><input type="time" id="autoOffAt" /></span></div>
       </div>
 
       <div class="card step">
@@ -996,8 +997,12 @@
     function renderTop() {
       $('autoDetect').value = state.settings.autoDetect;
       $('sendMode').value = state.settings.sendMode;
-      $('paused').value = state.settings.paused;
-      $('statusPill').classList.toggle('paused', state.settings.paused === 'on');
+      const off = state.settings.paused === 'on';
+      const backlog = state.watches.filter((w) => w.reply_state === 'unknown').length;
+      $('statusPill').textContent = off ? '퇴근' : '근무 중';
+      $('statusPill').classList.toggle('paused', off);
+      $('work').textContent = off ? (backlog ? `출근 · ${backlog}` : '출근') : '퇴근';
+      $('work').title = off ? '밀린 대화마다 초안(승인 대기)과 요약을 만듭니다' : '판단·초안·자동 전송을 멈춥니다. 메시지는 목록에 쌓입니다';
     }
 
     // state:changed가 몰려 와도 한 번에 하나씩만 그린다. 그리는 동안 온 알림은 끝난 뒤 한 번으로 합친다
@@ -1021,6 +1026,7 @@
       renderDetailLlm();
       for (const id of TIMING) if (document.activeElement !== $(id)) $(id).value = state.settings[id];
       if (document.activeElement !== $('adUrl')) $('adUrl').value = state.settings.adUrl === 'none' ? '' : state.settings.adUrl;
+      if (document.activeElement !== $('autoOffAt')) $('autoOffAt').value = state.settings.autoOffAt === 'none' ? '' : state.settings.autoOffAt;
       renderAd(state.settings.adUrl);
       renderMyScope();
       if (document.activeElement !== $('myGuide')) $('myGuide').value = state.settings.myGuide === 'none' ? '' : state.settings.myGuide;
@@ -1052,7 +1058,25 @@
     $('inboxToggle').onclick = () => { inboxCollapsed = !inboxCollapsed; $('inboxSec').classList.toggle('collapsed', inboxCollapsed); };
     $('autoDetect').onchange = (e) => api.setSetting('autoDetect', e.target.value);
     $('sendMode').onchange = (e) => api.setSetting('sendMode', e.target.value);
-    for (const id of ['paused', 'model', 'judgeModel', 'codeModel', 'draftEffort', 'summaryEffort']) $(id).onchange = (e) => api.setSetting(id, e.target.value);
+    for (const id of ['model', 'judgeModel', 'codeModel', 'draftEffort', 'summaryEffort']) $(id).onchange = (e) => api.setSetting(id, e.target.value);
+    // withLoading은 끝나면 예전 글자로 되돌려서 쓰지 않는다 (출근↔퇴근으로 글자가 바뀌어야 한다)
+    $('work').onclick = async () => {
+      $('work').disabled = true;
+      try {
+        if (state.settings.paused === 'on') {
+          const n = await api.clockIn();
+          toast(n ? `밀린 대화 ${n}개를 정리합니다. 초안은 모두 승인 대기로 둡니다` : '출근했습니다. 밀린 대화가 없습니다');
+        } else {
+          await api.setSetting('paused', 'on');
+          toast('퇴근했습니다. 출근을 누를 때까지 AI를 쓰지 않습니다');
+        }
+      } catch (err) { toast(errText(err), 'err'); }
+      finally { $('work').disabled = false; await refresh(); }
+    };
+    $('autoOffAt').onchange = async () => {
+      try { await api.setSetting('autoOffAt', $('autoOffAt').value || 'none'); toast('저장했습니다'); }
+      catch (err) { toast(errText(err), 'err'); }
+    };
     $('addLink').onclick = () => act($('addLink'), '읽는 중…', async () => {
       await api.addLink($('link').value);
       $('link').value = ''; toast('감시를 시작했습니다');
@@ -1219,6 +1243,7 @@
       const where = targets.length === Object.keys(TARGET_LABEL).length ? '' : `${targets.map((t) => TARGET_LABEL[t]).join('·')}만 · `;
       $('replySummary').textContent = [
         `나를 부르면 ${s.urgentDelaySec}초 · 댓글은 ${s.batchDelaySec}초 모아서 판단`,
+        ...(s.autoOffAt !== 'none' ? [`${s.autoOffAt} 자동 퇴근`] : []),
         s.sendMode !== 'auto' ? '자동 전송 안 함 (초안만)'
           : targets.length ? `자동 전송: ${where}카테고리 ${cats}개 · ${riskPresetOf(s)?.label ?? `위험 ${s.autoMaxRisk} 미만`}` : '자동 전송할 대화 없음',
       ].join(' · ');
