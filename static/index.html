@@ -215,6 +215,7 @@
     .presets { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 6px; }
     .presets button { border: 1px solid var(--line); background: var(--panel); color: var(--text); border-radius: 999px; padding: 5px 14px; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
     .presets button.on { background: var(--brand-soft); border-color: var(--brand); color: var(--brand); }
+    #settings .numbox input[type=time] { width: 130px; text-align: left; }
     #settings .numbox input:focus { border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-soft); }
     /* 담당 업무·광고 주소 같은 글자 입력칸. 기본 흰 입력칸은 다크 모드에서 튀고 안내 문구가 흐려서 숫자칸과 같은 모양으로 */
     #settings input.input { flex: none; border: 1px solid var(--line); background: var(--bg); border-radius: 8px; padding: 6px 10px; font: inherit; font-size: 13px; color: var(--text); outline: none; }
@@ -999,7 +1000,8 @@
       $('sendMode').value = state.settings.sendMode;
       const off = state.settings.paused === 'on';
       const backlog = state.watches.filter((w) => w.reply_state === 'unknown').length;
-      $('statusPill').textContent = off ? '퇴근' : '근무 중';
+      const offAt = state.settings.autoOffAt;
+      $('statusPill').textContent = off ? '퇴근' : offAt !== 'none' ? `근무 중 · ${offAt} 퇴근` : '근무 중';
       $('statusPill').classList.toggle('paused', off);
       $('work').textContent = off ? (backlog ? `출근 · ${backlog}` : '출근') : '퇴근';
       $('work').title = off ? '밀린 대화마다 초안(승인 대기)과 요약을 만듭니다' : '판단·초안·자동 전송을 멈춥니다. 메시지는 목록에 쌓입니다';
@@ -1074,7 +1076,8 @@
       finally { $('work').disabled = false; await refresh(); }
     };
     $('autoOffAt').onchange = async () => {
-      try { await api.setSetting('autoOffAt', $('autoOffAt').value || 'none'); toast('저장했습니다'); }
+      const v = $('autoOffAt').value || 'none';
+      try { await api.setSetting('autoOffAt', v); toast(v === 'none' ? '자동 퇴근을 껐습니다' : `매일 ${v}에 자동 퇴근합니다`); }
       catch (err) { toast(errText(err), 'err'); }
     };
     $('addLink').onclick = () => act($('addLink'), '읽는 중…', async () => {
