@@ -213,6 +213,9 @@
     #settings .srow select { flex: none; min-width: 170px; font-family: inherit; font-size: 13px; border: 1px solid var(--line); background: var(--bg); border-radius: 8px; padding: 6px 10px; cursor: pointer; }
     #settings .numbox { display: flex; align-items: center; gap: 6px; flex: none; color: var(--sub); }
     #settings .numbox input { width: 76px; border: 1px solid var(--line); background: var(--bg); border-radius: 8px; padding: 6px 8px; text-align: right; font: inherit; color: var(--text); outline: none; }
+    .presets { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 6px; }
+    .presets button { border: 1px solid var(--line); background: var(--panel); color: var(--text); border-radius: 999px; padding: 5px 14px; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+    .presets button.on { background: var(--brand-soft); border-color: var(--brand); color: var(--brand); }
     #settings .numbox input:focus { border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-soft); }
     /* 담당 업무·광고 주소 같은 글자 입력칸. 기본 흰 입력칸은 다크 모드에서 튀고 안내 문구가 흐려서 숫자칸과 같은 모양으로 */
     #settings input.input { flex: none; border: 1px solid var(--line); background: var(--bg); border-radius: 8px; padding: 6px 10px; font: inherit; font-size: 13px; color: var(--text); outline: none; }
@@ -427,14 +430,19 @@
 
       <div class="card step">
         <h3>자동 전송</h3>
-        <div class="hint">초안마다 모델이 점수 두 개를 매깁니다. <b>위험</b>(0~100)은 확인 없이 보냈을 때 문제가 될 가능성, <b>확신</b>(0~100%)은 초안이 내 말투·의도에 맞을 가능성입니다. 두 점수는 합치거나 곱하지 않고 아래 기준과 하나씩 비교합니다. 업무지시·결정, 장애·긴급, 민감은 점수와 상관없이 항상 직접 확인합니다.</div>
+        <div class="hint">초안마다 모델이 매긴 위험·확신 점수로 자동으로 보낼지 정합니다. 업무지시·결정, 장애·긴급, 민감은 점수와 상관없이 항상 직접 확인합니다.</div>
         <div class="srow"><div><b>자동 전송할 대화</b><small>여기서 고른 곳에 온 메시지만 자동으로 보냅니다. 뺀 곳은 초안을 승인 대기로 둡니다</small></div></div>
         <div id="autoTargets"></div>
         <div class="srow"><div><b>자동 전송할 카테고리</b><small>여기서 고른 종류의 대화만 자동으로 보냅니다</small></div></div>
         <div id="autoCategories"></div>
-        <div class="srow"><div><b>자동 전송할 위험</b><small>위험이 이 값보다 낮은 초안만 자동으로 보냅니다. 낮출수록 자동 전송이 줄어듭니다</small></div><span class="numbox"><input type="number" id="autoMaxRisk" min="0" max="100" />미만</span></div>
-        <div class="srow"><div><b>직접 확인할 위험</b><small>위험이 이 값 이상이면 초안 모드여도 '직접 확인'으로 올려 알립니다. 낮출수록 직접 볼 일이 늘어납니다</small></div><span class="numbox"><input type="number" id="escalateRisk" min="1" max="100" />이상</span></div>
-        <div class="srow"><div><b>자동 전송할 확신</b><small>확신이 이 값 이상인 초안만 자동으로 보냅니다. 높일수록 자동 전송이 줄어듭니다</small></div><span class="numbox"><input type="number" id="autoMinConfidence" min="0" max="100" />% 이상</span></div>
+        <div class="srow"><div><b>얼마나 맡길까요</b><small id="riskPresetDesc"></small></div></div>
+        <div class="presets" id="riskPresets"></div>
+        <div id="riskCustom" hidden>
+          <div class="hint">초안마다 모델이 점수 두 개를 매깁니다. <b>위험</b>(0~100)은 확인 없이 보냈을 때 문제가 될 가능성, <b>확신</b>(0~100%)은 초안이 내 말투·의도에 맞을 가능성입니다. 두 점수는 합치거나 곱하지 않고 아래 기준과 하나씩 비교합니다.</div>
+          <div class="srow"><div><b>자동 전송할 위험</b><small>위험이 이 값보다 낮은 초안만 자동으로 보냅니다. 낮출수록 자동 전송이 줄어듭니다</small></div><span class="numbox"><input type="number" id="autoMaxRisk" min="0" max="100" />미만</span></div>
+          <div class="srow"><div><b>직접 확인할 위험</b><small>위험이 이 값 이상이면 초안 모드여도 '직접 확인'으로 올려 알립니다. 낮출수록 직접 볼 일이 늘어납니다</small></div><span class="numbox"><input type="number" id="escalateRisk" min="1" max="100" />이상</span></div>
+          <div class="srow"><div><b>자동 전송할 확신</b><small>확신이 이 값 이상인 초안만 자동으로 보냅니다. 높일수록 자동 전송이 줄어듭니다</small></div><span class="numbox"><input type="number" id="autoMinConfidence" min="0" max="100" />% 이상</span></div>
+        </div>
         <div class="note info" id="riskZones"></div>
         <div class="srow"><div><b>자동 전송 지연</b><small>자동 전송할 초안은 이 범위에서 무작위로 기다렸다 보냅니다. 그 사이 대화가 바뀌면 보내지 않습니다</small></div><span class="numbox"><input type="number" id="autoSendMinSec" min="0" max="3600" />~<input type="number" id="autoSendMaxSec" min="0" max="3600" />초</span></div>
       </div>
@@ -1027,6 +1035,7 @@
       $('autoTargets').replaceChildren(...Object.entries(TARGET_LABEL).map(([v, label]) => el('label', { className: 'opt' },
         el('input', { type: 'checkbox', checked: targets.includes(v), value: v, onchange: saveChecked('autoTargets') }),
         el('div', {}, el('b', { textContent: label })))));
+      renderRiskPresets();
       renderRiskZones();
       $('inboxCount').textContent = state.openDrafts.length;
       $('inboxSec').classList.toggle('collapsed', inboxCollapsed);
@@ -1211,7 +1220,7 @@
       $('replySummary').textContent = [
         `나를 부르면 ${s.urgentDelaySec}초 · 댓글은 ${s.batchDelaySec}초 모아서 판단`,
         s.sendMode !== 'auto' ? '자동 전송 안 함 (초안만)'
-          : targets.length ? `자동 전송: ${where}카테고리 ${cats}개 · 위험 ${s.autoMaxRisk} 미만` : '자동 전송할 대화 없음',
+          : targets.length ? `자동 전송: ${where}카테고리 ${cats}개 · ${riskPresetOf(s)?.label ?? `위험 ${s.autoMaxRisk} 미만`}` : '자동 전송할 대화 없음',
       ].join(' · ');
       const groups = s.mentionGroups === 'none' ? 0 : s.mentionGroups.split(',').length;
       $('slackSummary').textContent = groups ? `그룹 멘션 ${groups}개` : '그룹 멘션 없음';
@@ -1235,6 +1244,27 @@
       await saveProjectDirs([...new Set([...projectDirs(), ...picked])]);
       toast('폴더를 추가했습니다');
     });
+    // 자동 전송 기준 프리셋 칩. 세 값이 모두 같은 프리셋을 고르고, 없거나 '직접 설정'을 누른 동안은 숫자 입력을 펼친다
+    let riskCustom = false;
+    let riskApplying = null; // 저장 중인 프리셋 id. 값이 하나씩 바뀌는 동안 칩이 '직접 설정'으로 깜빡이지 않게
+    const riskPresetOf = (s) => state.riskPresets.find((p) => Object.entries(p.values).every(([k, v]) => s[k] === v));
+    function renderRiskPresets() {
+      const id = riskApplying ?? (riskCustom ? null : riskPresetOf(state.settings)?.id ?? null);
+      const picked = state.riskPresets.find((p) => p.id === id);
+      const chip = (label, on, onclick) => el('button', { className: on ? 'on' : '', textContent: label, onclick });
+      $('riskPresets').replaceChildren(
+        ...state.riskPresets.map((p) => chip(p.label, p === picked, () => applyRiskPreset(p))),
+        chip('직접 설정', !picked, () => { riskCustom = true; renderRiskPresets(); }));
+      $('riskPresetDesc').textContent = picked ? picked.desc : '위험·확신 기준을 숫자로 직접 정합니다';
+      $('riskCustom').hidden = !!picked;
+    }
+    async function applyRiskPreset(p) {
+      riskApplying = p.id; riskCustom = false;
+      renderRiskPresets();
+      try { for (const [k, v] of Object.entries(p.values)) await api.setSetting(k, v); toast('저장했습니다. 다음 메시지부터 적용됩니다'); }
+      catch (err) { toast(errText(err), 'err'); }
+      finally { riskApplying = null; await refresh(); }
+    }
     // 위험 기준 두 개가 위험 점수를 세 구간으로 나눈다. 지금 설정값으로 풀어 쓴다
     function renderRiskZones() {
       const s = state.settings;
