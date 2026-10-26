@@ -8,7 +8,7 @@ import { hasPersona, loadMyScope, loadPersona } from './responder/draft.js';
 import { badgeCount, openStore, type WatchMode } from './store/db.js';
 import { createEngine } from './engine.js';
 import { EFFORTS, MODELS } from './llm/claude.js';
-import { SETTINGS, parseDirs, parseGroups, parseKeywordMap, validateSetting } from './ctl/settings.js';
+import { RISK_PRESETS, SETTINGS, parseDirs, parseGroups, parseKeywordMap, validateSetting } from './ctl/settings.js';
 import { cachedProjects } from './projects.js';
 import { AUTO_ELIGIBLE } from './responder/policy.js';
 import { DB_PATH, NOTES_DIR, migrateLegacyData } from './paths.js';
@@ -48,6 +48,7 @@ async function boot() {
     models: MODELS,
     efforts: EFFORTS,
     autoEligible: AUTO_ELIGIBLE,
+    riskPresets: RISK_PRESETS,
     autoScope: loadMyScope(), // 말투 분석이 뽑은 담당 업무 (설정 화면 안내용)
     codeNotes: countNotes(),
     projects: cachedProjects(parseDirs(store.getSetting('projectDirs', 'none')), parseKeywordMap(store.getSetting('projectKeywords', '{}'))), // 폴더별 키워드 (설정 화면용)
